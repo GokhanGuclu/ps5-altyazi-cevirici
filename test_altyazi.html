@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Altyazi Testi</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; font-family: Arial, sans-serif; }
+  /* Hareketli arka plan: oyun sahnesi gibi surekli degisir */
+  body { background: linear-gradient(120deg, #1d3b2a, #4a3b1d, #1d2a4a, #3b1d3b); background-size: 400% 400%;
+         animation: scene 12s ease infinite; }
+  @keyframes scene { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+  #sub { position: fixed; left: 0; right: 0; bottom: 12%; text-align: center; color: #fff; font-size: 34px;
+         font-weight: bold; text-shadow: 2px 2px 3px #000, -2px -2px 3px #000; padding: 0 10%; min-height: 1.3em; }
+  #info { position: fixed; top: 12px; left: 16px; color: #ddd; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="info">Altyazi testi - F11 ile tam ekran. Altyazilar asagida belirir.</div>
+<div id="sub"></div>
+<script>
+  const lines = [
+    "Kratos: Stay close, boy.",
+    "We need to leave before the guards come back.",
+    "The bridge is broken. We will have to find another way.",
+    "Atreus: Father, look! There is something in the water.",
+    "Do not trust anyone you meet in this forest.",
+    "If we hurry, we can reach the mountain before nightfall.",
+    "I have never seen a creature like this before.",
+    "Hold on. Something is not right here."
+  ];
+  const sub = document.getElementById('sub');
+  let i = 0;
+  function show() {
+    const text = lines[i++ % lines.length];
+    const typewriter = i % 3 === 0;  // her 3. satir harf harf yazilir
+    if (typewriter) {
+      let n = 0;
+      const t = setInterval(() => { sub.textContent = text.slice(0, ++n); if (n >= text.length) clearInterval(t); }, 45);
+    } else {
+      sub.textContent = text;
+    }
+    setTimeout(() => { sub.textContent = ''; setTimeout(show, 1800); }, 4500);  // 4.5 sn gorunur, 1.8 sn bos
+  }
+  show();
+</script>
+</body>
+</html>

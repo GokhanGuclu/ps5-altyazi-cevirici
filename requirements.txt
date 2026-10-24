@@ -1,0 +1,11 @@
+PySide6>=6.6
+mss
+opencv-python
+numpy
+pytesseract
+transformers>=4.44,<5
+huggingface-hub>=0.34,<1.0
+torch>=2.6
+sentencepiece
+protobuf
+sacremoses

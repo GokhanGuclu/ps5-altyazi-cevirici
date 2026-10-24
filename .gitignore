@@ -1,0 +1,21 @@
+# Kisisel ayarlar ve calisma ciktilari
+ayarlar.json
+altyazi.txt
+altyazi.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Model dosyalari depoya girmez
+models/
+*.bin
+*.safetensors
+
+# Diger
+.superpowers/
+.vscode/
+.idea/
+Thumbs.db
