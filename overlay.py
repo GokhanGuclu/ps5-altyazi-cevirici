@@ -19,6 +19,10 @@ PAGE = """<!doctype html>
   #box { position: absolute; left: 6%; right: 6%; bottom: var(--bottom); text-align: center;
          font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; color: #fff;
          font-size: var(--size); line-height: 1.25; }
+  /* Koyu kutu, alttaki orijinal (Ingilizce) altyaziyi orter; ?bg=0 ile kapatilir. */
+  #box:not(:empty) { background: rgba(0, 0, 0, var(--bg)); border-radius: .35em;
+                     padding: .3em .6em; left: 50%; right: auto; transform: translateX(-50%);
+                     width: max-content; max-width: 88%; }
   .line { display: block; paint-order: stroke fill; -webkit-text-stroke: var(--stroke) #000;
           text-shadow: 0 2px 6px rgba(0,0,0,.8); animation: in .12s ease-out; }
   .prev { font-size: .78em; opacity: .6; margin-bottom: .2em; }
@@ -28,12 +32,16 @@ PAGE = """<!doctype html>
 <body>
 <div id="box"></div>
 <script>
-  // URL ayarlari: ?size=46&bottom=14  (size: piksel, bottom: ekran yuksekliginin yuzdesi)
+  // URL ayarlari: ?size=46&bottom=14&bg=0.8
+  //   size: yazi boyutu (piksel), bottom: alttan uzaklik (ekran yuksekliginin yuzdesi),
+  //   bg: arka plan kutusunun koyulugu (0 = kutu yok, 1 = tamamen siyah)
   const q = new URLSearchParams(location.search);
   const size = +(q.get('size') || 46);
+  const bg = q.has('bg') ? +q.get('bg') : 0.8;
   document.documentElement.style.setProperty('--size', size + 'px');
-  document.documentElement.style.setProperty('--stroke', Math.max(4, Math.round(size / 7)) + 'px');
+  document.documentElement.style.setProperty('--stroke', Math.max(bg > 0.5 ? 2 : 4, Math.round(size / (bg > 0.5 ? 14 : 7))) + 'px');
   document.documentElement.style.setProperty('--bottom', (q.get('bottom') || 14) + 'vh');
+  document.documentElement.style.setProperty('--bg', bg);
   const box = document.getElementById('box');
   let shown = [];
   function render(lines) {

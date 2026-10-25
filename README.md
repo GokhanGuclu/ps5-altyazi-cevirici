@@ -194,9 +194,10 @@ Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı
 ### 4. Türkçe altyazı
 1. **Kaynaklar → + → Tarayıcı** → URL: **`http://127.0.0.1:8765`**, **Genişlik 1920**, **Yükseklik 1080**.
 2. Kaynak listesinde **Tarayıcı** kaynağının **Video Yakalama Aygıtı**'nın **üstünde** olduğundan emin olun.
-3. Yazı boyutunu ve konumunu URL ile ayarlayabilirsiniz: `http://127.0.0.1:8765/?size=52&bottom=18`
+3. Türkçe yazı koyu bir kutu içinde gösterilir; kutu oyunun İngilizce altyazısını örter. Görünümü URL ile ayarlayabilirsiniz: `http://127.0.0.1:8765/?size=52&bottom=18&bg=0.8`
    - `size`: yazı boyutu (piksel, varsayılan 46)
-   - `bottom`: alttan uzaklık (ekran yüksekliğinin yüzdesi, varsayılan 14)
+   - `bottom`: alttan uzaklık (ekran yüksekliğinin yüzdesi, varsayılan 14). Kutunun İngilizce altyazının üstüne gelmesi için ayarlayın.
+   - `bg`: kutunun koyuluğu (0 = kutu yok, 1 = tamamen siyah, varsayılan 0.8)
 
 > Tarayıcı kaynağı, çeviriyi beklemeden anında gösterir. Eski **Metin (GDI+) → Dosyadan oku → `altyazi.txt`** yöntemi de çalışır, ancak OBS dosyayı saniyede bir kontrol ettiği için kısa altyazıları kaçırabilir.
 
@@ -277,6 +278,12 @@ OBS açık değil ya da sanal kamera başlatılmamış. OBS'in sağ altındaki *
 - Tarayıcı kaynağı, kaynak listesinde oyun görüntüsünün **üstünde** mi?
 - Uygulama **Başlat**'a basılmış ve rozet **Hazır** mı?
 - Uygulama iki kez açıksa ikincisi bu adresi kullanamaz; birini kapatın.
+</details>
+
+<details>
+<summary><b>Çeviriler saçma ya da yarım çıkıyor ("Za'nın adı:" gibi)</b></summary>
+
+Uygulama büyük ihtimalle kendi Türkçe altyazınızı da okuyor. Aşağıdaki maddeye bakın.
 </details>
 
 <details>
