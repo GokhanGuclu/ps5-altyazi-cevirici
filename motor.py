@@ -37,7 +37,7 @@ DEFAULTS = {
     'tesseract': r'C:\Program Files\Tesseract-OCR\tesseract.exe',
     'model': r'C:\AI-Models\nllb-200',
     'text_mode': 'light',  # light: acik renk yazi, dark: koyu renk yazi, none: esikleme yok
-    'threshold': 170,
+    'min_contrast': 25,    # yazinin cevresinden en az bu kadar parlak (koyu) olmasi gerekir
     'min_confidence': 60,  # Tesseract'in bu puanin altinda okudugu kelimeler atilir
     'overlay_port': 8765,  # OBS Tarayici kaynagi: http://127.0.0.1:8765
 }
@@ -49,6 +49,7 @@ MIN_SHOW = 1.5       # her ceviri en az bu kadar ekranda kalir (sn)
 KEEP_PREVIOUS = 2.5  # yeni altyazi gelince, bundan kisa sure gorunmus onceki ceviri ustte kalir (sn)
 SIMILAR = 0.9        # bu oranin ustundeki iki okuma ayni metin sayilir
 CACHE_SIZE = 500
+TEXT_KERNEL = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))  # harf kalinligindan genis
 OCR_LINE_HEIGHT = 20     # OCR'den once her satir bu yukseklige olceklenir (px)
 CAMERA_SIZE = (1920, 1080)
 SPEAKER = re.compile(r"^((?:[A-Z][\w'.-]*\s?){1,3}):\s*(.+)$")
@@ -198,13 +199,57 @@ def write_output(text):
     OUTPUT.write_text(text, encoding='utf-8')
 
 
-def binarize(gray, mode, limit):
-    # Tesseract en iyi beyaz zemin uzerinde siyah yaziyi okur.
-    if mode == 'light':
-        return cv2.threshold(gray, limit, 255, cv2.THRESH_BINARY_INV)[1]
-    if mode == 'dark':
-        return cv2.threshold(gray, 255 - limit, 255, cv2.THRESH_BINARY)[1]
-    return gray
+def text_mask(gray, mode, min_contrast):
+    """Altyaziyi arka plandan ayirir; beyaz zemin uzerinde siyah yazi dondurur (Tesseract boyle sever).
+
+    Sabit parlaklik esigi ise yaramaz: bazi oyunlarda yazi koyu gridir (~120) ve arkadaki gomlek,
+    el gibi nesneler yazidan parlaktir. Bunun yerine yerel kontrasta bakilir (morfolojik top-hat):
+    cevresinden parlak INCE cizgiler yazi sayilir, genis parlak alanlar elenir. Ardindan ayni satira
+    dizilmeyen ya da harf boyutunda olmayan parcalar atilir."""
+    if mode == 'none':
+        return cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    op = cv2.MORPH_TOPHAT if mode == 'light' else cv2.MORPH_BLACKHAT
+    contrast = cv2.morphologyEx(gray, op, TEXT_KERNEL)
+    blank = np.full_like(gray, 255)
+    if np.percentile(contrast, 99.7) < min_contrast:
+        return blank  # belirgin yazi yok; Otsu bos karede gurultuyu yazi sanmasin
+    ink = cv2.threshold(contrast, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+    return 255 - keep_text_components(ink)
+
+
+def keep_text_components(ink):
+    """Yalnizca ayni satirlara dizilmis, harf boyutundaki parcalari birakir (255 = yazi)."""
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    boxes = [(i, *stats[i][:4]) for i in range(1, n) if stats[i][4] >= 4 and stats[i][3] >= 3]
+    tall = [h for _, _, _, _, h in boxes if h >= 6]
+    if not tall:
+        return np.zeros_like(ink)
+    height = float(np.median(tall))  # tipik harf yuksekligi
+    # Harften buyuk lekeler ve ince yatay yaylar (arka plandaki kenarlar) elenir.
+    candidates = [b for b in boxes if b[4] <= 1.8 * height and b[3] <= 4 * height
+                  and not (b[4] < 0.5 * height and b[3] > 2.5 * b[4])]
+    # Satirlara grupla: dikey merkezleri yakin olan parcalar ayni satirdadir.
+    candidates.sort(key=lambda b: b[2] + b[4] / 2)
+    lines, current = [], []
+    for box in candidates:
+        center = box[2] + box[4] / 2
+        if current and center - (current[-1][2] + current[-1][4] / 2) > 0.6 * height:
+            lines.append(current)
+            current = []
+        current.append(box)
+    if current:
+        lines.append(current)
+    keep = np.zeros(n, bool)
+    for line in lines:
+        letters = [b for b in line if b[4] >= 0.5 * height]
+        if len(letters) < 3:  # tek basina duran leke satir sayilmaz
+            continue
+        # Harfler yan yana sik dizilir; arka plandan kalan lekeler satira seyrek dagilir.
+        left = min(b[1] for b in letters)
+        right = max(b[1] + b[3] for b in letters)
+        if sum(b[3] for b in letters) >= 0.35 * (right - left):
+            keep[[b[0] for b in line]] = True
+    return np.where(keep[labels], 255, 0).astype(np.uint8)
 
 
 def clean_text(raw):
@@ -515,7 +560,7 @@ class Engine:
             self.ui(state='error', status=f'Model hatası: {exc}')
 
     def run(self, stop, pending, region, camera):
-        mode, limit = self.config['text_mode'], int(self.config['threshold'])
+        mode, min_contrast = self.config['text_mode'], float(self.config['min_contrast'])
         min_confidence = float(self.config['min_confidence'])
         committed = ''  # ceviriye gonderilen son metin
         visible = False
@@ -535,13 +580,14 @@ class Engine:
                 # Degisim yazi maskesi uzerinden olculur; arkadaki hareketli sahne OCR'yi tetiklemez.
                 # Ortalama fark yerine degisen piksel sayisina bakilir: "No." yerine "Go!" gelmesi
                 # gibi kucuk degisiklikler de yakalanir.
-                small = cv2.resize(binarize(gray, mode, limit), CHANGE_GRID, interpolation=cv2.INTER_AREA)
+                mask = text_mask(gray, mode, min_contrast)
+                small = cv2.resize(mask, CHANGE_GRID, interpolation=cv2.INTER_AREA)
                 changed = (previous_small is None or
                            np.count_nonzero(cv2.absdiff(small, previous_small) > 48) >= CHANGE_PIXELS)
                 if changed:
                     previous_small = small
                     detected = time.perf_counter()
-                    current = read_text(binarize(gray, mode, limit), min_confidence)
+                    current = read_text(mask, min_confidence)
                     self.ui(ocr_ms=int((time.perf_counter() - detected) * 1000))
                     visible = looks_like_text(current)
                     if not visible and np.mean(small < 128) > 0.005:

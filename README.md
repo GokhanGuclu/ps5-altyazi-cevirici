@@ -250,14 +250,17 @@ Uygulama ayarlarını proje klasöründeki `ayarlar.json` dosyasında tutar. Bu 
 | `camera_region` / `region` | — | Seçilen altyazı alanı. **Alan Seç** ile otomatik yazılır. |
 | `tesseract` | `C:\Program Files\Tesseract-OCR\tesseract.exe` | Tesseract'ın yolu. Bulunamazsa sistem `PATH`'inde aranır. |
 | `model` | `C:\AI-Models\nllb-200` | Çeviri modelinin klasörü. Klasör yoksa model HuggingFace'ten indirilir. |
-| `text_mode` | `light` | Altyazının rengi: `light` (beyaz/açık yazı — çoğu oyun), `dark` (koyu yazı), `none` (görüntü temizleme kapalı). |
-| `threshold` | `170` | Yazıyı arka plandan ayırma eşiği (0–255). |
+| `text_mode` | `light` | Altyazının rengi: `light` (arka plandan açık yazı — çoğu oyun, gri yazılar dahil), `dark` (koyu yazı), `none` (görüntü temizleme kapalı). |
+| `min_contrast` | `25` | Yazının çevresinden en az ne kadar parlak olması gerektiği (0–255). |
 | `min_confidence` | `60` | Tesseract'ın bu puanın altında okuduğu kelimeler atılır (0–100). |
 | `overlay_port` | `8765` | OBS Tarayıcı kaynağının adresindeki port. |
 
-**`threshold` nasıl ayarlanır?**
-- Altyazı **okunmuyor** ya da eksik okunuyorsa → değeri **düşürün** (ör. `140`).
-- Arka plandaki parlak nesneler **anlamsız harfler** olarak okunuyorsa → değeri **yükseltin** (ör. `200`).
+**Yazı arka plandan nasıl ayrılıyor?**
+Sabit bir parlaklık eşiği kullanılmaz; bazı oyunlarda altyazı koyu gridir ve arkadaki gömlek, el, gökyüzü gibi nesneler yazıdan parlaktır. Bunun yerine **yerel kontrasta** bakılır: çevresinden parlak **ince çizgiler** yazı sayılır, geniş parlak alanlar elenir. Ardından aynı satıra dizilmeyen ya da harf boyutunda olmayan lekeler atılır.
+
+**`min_contrast` nasıl ayarlanır?**
+- Soluk altyazılar **okunmuyorsa** → değeri **düşürün** (ör. `15`).
+- Altyazı yokken **anlamsız harfler** okunuyorsa → değeri **yükseltin** (ör. `40`) ya da `min_confidence`'ı yükseltin (ör. `75`).
 
 Ayarı değiştirdikten sonra uygulamayı yeniden başlatın.
 
@@ -312,7 +315,7 @@ PyTorch'un ekran kartı destekli sürümü kurulu değil. [5. adımdaki](#5-ekra
 <summary><b>EN satırı boş kalıyor, hiçbir şey okunmuyor</b></summary>
 
 - Seçtiğiniz alanın altyazıyı tamamen kapsadığından emin olun. Alanı yeniden, biraz daha geniş seçin.
-- `threshold` değerini düşürün (ör. `140`).
+- `min_contrast` değerini düşürün (ör. `15`).
 - Oyununuzun altyazıları koyu renkliyse `text_mode` değerini `dark` yapın.
 - Oyunda altyazı boyutunu büyütün ve varsa altyazı arka planını açın.
 </details>
@@ -320,7 +323,7 @@ PyTorch'un ekran kartı destekli sürümü kurulu değil. [5. adımdaki](#5-ekra
 <details>
 <summary><b>EN satırında anlamsız karakterler çıkıyor</b></summary>
 
-Arka plandaki parlak alanlar yazı sanılıyor. `threshold` değerini yükseltin (ör. `200`), alanı yalnızca altyazı bandını kapsayacak şekilde daraltın ya da `min_confidence` değerini yükseltin (ör. `75`).
+Arka plandaki nesneler yazı sanılıyor. `min_contrast` değerini yükseltin (ör. `40`), alanı yalnızca altyazı bandını kapsayacak şekilde daraltın ya da `min_confidence` değerini yükseltin (ör. `75`).
 </details>
 
 <details>
@@ -384,7 +387,7 @@ Hata bildirimleri, öneriler ve katkılar memnuniyetle karşılanır! Bir sorunl
 
 - Uygulama penceresinin ekran görüntüsü (rozet ve Gecikme / OCR / Çeviri süreleriyle birlikte)
 - Hangi oyunu oynadığınız ve yakalama kartınızın modeli
-- `ayarlar.json` içindeki `text_mode`, `threshold` ve `min_confidence` değerleri
+- `ayarlar.json` içindeki `text_mode`, `min_contrast` ve `min_confidence` değerleri
 
 ---
 
