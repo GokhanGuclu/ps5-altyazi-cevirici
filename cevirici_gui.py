@@ -6,10 +6,11 @@ import sys
 # Arayuz boyutlari asagida px() ile ekran olcegine gore elle buyutulur.
 os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0'
 
+import cv2
 from PySide6.QtCore import QObject, QPoint, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QIcon, QLinearGradient, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (QApplication, QFrame, QGraphicsDropShadowEffect, QHBoxLayout,
-                               QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtGui import QColor, QFont, QIcon, QImage, QLinearGradient, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QGraphicsDropShadowEffect,
+                               QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
 import motor
 
@@ -22,6 +23,7 @@ STATES = {  # durum: (nokta rengi, rozet metni)
     'error': ('#ff5470', 'Hata'),
 }
 MINIMIZE_AFTER_MS = 2500
+SOURCES = [('camera', 'OBS Sanal Kamera'), ('screen', 'Ekran')]
 
 
 def px(value):
@@ -54,6 +56,12 @@ def stylesheet():
     QPushButton#start[running="true"] {{
         background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #e0445f, stop:1 #ff7a59); }}
     QPushButton:disabled {{ background: #1b2233; color: #56607e; }}
+    QComboBox {{ background: #1b2740; color: #e6ecff; border: none; border-radius: {px(8)}px;
+                 padding: {px(6)}px {px(10)}px; font-size: 9.5pt; }}
+    QComboBox:disabled {{ color: #56607e; }}
+    QComboBox::drop-down {{ border: none; width: {px(18)}px; }}
+    QComboBox QAbstractItemView {{ background: #1b2740; color: #e6ecff;
+                                   selection-background-color: #2f7bff; border: none; }}
     """
 
 
@@ -86,10 +94,12 @@ def dark_title_bar(widget):
         pass
 
 
-def describe_region(region):
+def describe_region(region, source='screen'):
     if not region:
         return 'Alan seçilmedi — önce “Alan Seç” ile altyazı bölgesini çizin'
     size = f"{region['width']}×{region['height']}"
+    if source == 'camera':
+        return f'Alan: {size}  ·  Sanal kamera'
     try:
         virtual, primary = motor.monitors()
     except Exception:
@@ -202,6 +212,104 @@ class Selector(QWidget):
         self.selected.emit(region)
 
 
+class FrameSelector(QWidget):
+    """Kameradan alinan tek kare uzerinde alan secimi; secim kare koordinatlarinda dondurulur."""
+    selected = Signal(object)
+
+    def __init__(self, frame):
+        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setCursor(Qt.CrossCursor)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w = rgb.shape[:2]
+        self.frame_size = (w, h)
+        self.pixmap = QPixmap.fromImage(QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy())
+        _, primary = motor.monitors()
+        self.setGeometry(primary['left'], primary['top'], primary['width'], primary['height'])
+        # Kare, ekrana sigacak sekilde ortalanir.
+        scale = min(primary['width'] / w, primary['height'] / h)
+        self.ratio = scale
+        self.target = QRect(int((primary['width'] - w * scale) / 2), int((primary['height'] - h * scale) / 2),
+                            int(w * scale), int(h * scale))
+        self.start = self.end = None
+        self.done = False
+
+    def show_and_focus(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus()
+
+    def selection(self):
+        if not (self.start and self.end):
+            return None
+        return QRect(self.start, self.end).normalized().intersected(self.target)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.fillRect(self.rect(), QColor('#05080f'))
+        p.drawPixmap(self.target, self.pixmap)
+        rect = self.selection()
+        if rect:
+            p.fillRect(self.target, QColor(5, 10, 20, 120))
+            p.drawPixmap(rect, self.pixmap, QRect(int((rect.left() - self.target.left()) / self.ratio),
+                                                  int((rect.top() - self.target.top()) / self.ratio),
+                                                  int(rect.width() / self.ratio), int(rect.height() / self.ratio)))
+            p.setPen(QPen(QColor('#2f7bff'), px(3)))
+            p.drawRect(rect)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(18, 26, 43, 235))
+        box = QRect(px(30), px(30), px(640), px(96))
+        p.drawRoundedRect(box, px(12), px(12))
+        p.setPen(QColor('#ffffff'))
+        p.setFont(QFont('Segoe UI', 14, QFont.Bold))
+        p.drawText(box.adjusted(px(18), px(10), 0, 0), Qt.AlignLeft | Qt.AlignTop,
+                   'Oyundaki altyazı bandını fareyle çizin')
+        p.setFont(QFont('Segoe UI', 9.5))
+        p.setPen(QColor('#8e9ac0'))
+        p.drawText(box.adjusted(px(18), 0, 0, -px(12)), Qt.AlignLeft | Qt.AlignBottom,
+                   'OBS logosu görüyorsanız OBS’te “Sanal Kamerayı Başlat”a basın  ·  ESC: İptal')
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.RightButton:
+            self.finish(None)
+            return
+        self.start = self.end = event.position().toPoint()
+        self.update()
+
+    def mouseMoveEvent(self, event):
+        if self.start:
+            self.end = event.position().toPoint()
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() != Qt.LeftButton or not self.start:
+            return
+        self.end = event.position().toPoint()
+        rect = self.selection()
+        if not rect or rect.width() < 30 or rect.height() < 12:
+            self.finish(None)
+            return
+        w, h = self.frame_size
+        left = int((rect.left() - self.target.left()) / self.ratio)
+        top = int((rect.top() - self.target.top()) / self.ratio)
+        self.finish({'left': left, 'top': top,
+                     'width': min(w - left, int(rect.width() / self.ratio)),
+                     'height': min(h - top, int(rect.height() / self.ratio))})
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self.finish(None)
+
+    def finish(self, region):
+        if self.done:
+            return
+        self.done = True
+        self.close()
+        self.selected.emit(region)
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -211,7 +319,7 @@ class MainWindow(QWidget):
         self.engine = motor.Engine(self.config, self.bridge.update.emit)
         self.state = 'idle'
         self.device = None
-        self.ocr_ms = self.tr_ms = None
+        self.ocr_ms = self.tr_ms = self.total_ms = None
         self.minimize_when_ready = False
         self.selector = None
 
@@ -243,6 +351,18 @@ class MainWindow(QWidget):
         header.addWidget(self.badge, alignment=Qt.AlignVCenter)
         layout.addLayout(header)
 
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel('Görüntü kaynağı', objectName='status'))
+        source_row.addStretch()
+        self.source = QComboBox(cursor=Qt.PointingHandCursor)
+        for key, name in SOURCES:
+            self.source.addItem(name, key)
+        self.source.setCurrentIndex(max(0, [k for k, _ in SOURCES].index(self.config['source'])
+                                         if self.config['source'] in dict(SOURCES) else 0))
+        self.source.currentIndexChanged.connect(self.source_changed)
+        source_row.addWidget(self.source)
+        layout.addLayout(source_row)
+
         self.region_label = QLabel(objectName='region', alignment=Qt.AlignCenter, wordWrap=True)
         layout.addWidget(self.region_label)
 
@@ -271,11 +391,13 @@ class MainWindow(QWidget):
             block.addWidget(label)
             layout.addLayout(block)
         layout.addWidget(QFrame(objectName='divider'))
-        layout.addWidget(QLabel('OBS: Metin (GDI+) → Dosyadan oku → altyazi.txt', objectName='small'))
+        overlay = QLabel(f"OBS: Tarayıcı kaynağı → http://127.0.0.1:{self.config['overlay_port']}",
+                         objectName='small')
+        overlay.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(overlay)
 
-        self.region_label.setText(describe_region(self.config['region']))
-        self.set_status('Hazır olduğunuzda Başlat’a basın.' if self.config['region']
-                        else 'Önce altyazı alanını seçin.')
+        self.status_text = ''
+        self.show_region()
         self.refresh()
         dark_title_bar(self)
 
@@ -293,9 +415,17 @@ class MainWindow(QWidget):
         self.start_button.style().unpolish(self.start_button)
         self.start_button.style().polish(self.start_button)
         self.select_button.setEnabled(not self.engine.busy())
+        self.source.setEnabled(not self.engine.busy())
+
+    def show_region(self):
+        region = motor.active_region(self.config)
+        self.region_label.setText(describe_region(region, self.config['source']))
+        self.set_status('Hazır olduğunuzda Başlat’a basın.' if region else 'Önce altyazı alanını seçin.')
 
     def set_status(self, text):
         parts = [text]
+        if self.total_ms is not None:
+            parts.append(f'Gecikme {self.total_ms} ms')
         if self.ocr_ms is not None:
             parts.append(f'OCR {self.ocr_ms} ms')
         if self.tr_ms is not None:
@@ -310,6 +440,8 @@ class MainWindow(QWidget):
             self.ocr_ms = values['ocr_ms']
         if 'tr_ms' in values:
             self.tr_ms = values['tr_ms']
+        if 'total_ms' in values:
+            self.total_ms = values['total_ms']
         if 'english' in values:
             self.english.setText(values['english'] or '—')
         if 'turkish' in values:
@@ -330,25 +462,36 @@ class MainWindow(QWidget):
 
     # --- eylemler ---
 
+    def source_changed(self):
+        self.config['source'] = self.source.currentData()
+        motor.save_config(self.config)
+        self.show_region()
+
     def select(self):
         if self.engine.busy():
             return
-        self.showMinimized()
-        QTimer.singleShot(300, self.open_selector)
-
-    def open_selector(self):
-        self.selector = Selector()
+        if self.config['source'] == 'camera':
+            index, error = motor.find_camera(self.config['camera'])
+            frame = motor.grab_camera_frame(index) if index is not None else None
+            if frame is None:
+                QMessageBox.warning(self, 'Sanal kamera', error or 'Sanal kameradan görüntü alınamadı.')
+                return
+            self.selector = FrameSelector(frame)
+        else:
+            self.selector = Selector()
         self.selector.selected.connect(self.selected)
-        self.selector.show_and_focus()
+        self.showMinimized()
+        QTimer.singleShot(300, self.selector.show_and_focus)
 
     def selected(self, region):
         self.showNormal()
         self.activateWindow()
         if not region:
             return
-        self.config['region'] = region
+        key = 'camera_region' if self.config['source'] == 'camera' else 'region'
+        self.config[key] = region
         motor.save_config(self.config)
-        self.region_label.setText(describe_region(region))
+        self.show_region()
         self.set_status('Alan kaydedildi. Başlatabilirsiniz.')
 
     def toggle(self):
@@ -357,11 +500,11 @@ class MainWindow(QWidget):
             self.set_status('Durduruluyor...')
             QTimer.singleShot(400, self.refresh)
             return
-        error = self.engine.start(self.config['region'])
+        error = self.engine.start()
         if error:
             QMessageBox.warning(self, 'Başlatılamadı', error)
             return
-        self.ocr_ms = self.tr_ms = None
+        self.ocr_ms = self.tr_ms = self.total_ms = None
         self.english.setText('—')
         self.turkish.setText('—')
         self.minimize_when_ready = True

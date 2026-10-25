@@ -2,7 +2,7 @@
 
 **Oyunlardaki İngilizce altyazıları anlık olarak Türkçeye çeviren, tamamen bilgisayarınızda çalışan ücretsiz bir araç.**
 
-Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlanıyorsanız bu araç tam size göre. Ekranın altyazı çıkan kısmını okur, Türkçeye çevirir ve çeviriyi OBS üzerinden oyun görüntüsünün üstüne yazar. İnternet bağlantısı, hesap ya da ücretli bir çeviri servisi gerekmez; her şey sizin bilgisayarınızda, sizin ekran kartınızda çalışır.
+Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlanıyorsanız bu araç tam size göre. Oyun görüntüsündeki altyazıyı okur, Türkçeye çevirir ve çeviriyi OBS üzerinden oyun görüntüsünün üstüne yazar. İnternet bağlantısı, hesap ya da ücretli bir çeviri servisi gerekmez; her şey sizin bilgisayarınızda, sizin ekran kartınızda çalışır.
 
 <p align="center">
   <img src="docs/arayuz.png" alt="PS5 Altyazı Çevirici arayüzü" width="440">
@@ -17,14 +17,14 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 - [Nasıl çalışır?](#-nasıl-çalışır)
 - [Neler gerekiyor?](#-neler-gerekiyor)
 - [Kurulum (adım adım)](#-kurulum-adım-adım)
-- [Kullanım](#-kullanım)
-- [OBS ayarı](#-obs-ayarı)
-- [İlk test: kurulumunuzu deneyin](#-i̇lk-test-kurulumunuzu-deneyin)
 - [PS5'i bağlama (HDMI yakalama kartı)](#-ps5i-bağlama-hdmi-yakalama-kartı)
+- [OBS ayarı](#-obs-ayarı)
+- [Kullanım](#️-kullanım)
+- [İlk test: kurulumunuzu deneyin](#-i̇lk-test-kurulumunuzu-deneyin)
 - [Ayarlar](#️-ayarlar)
-- [Sorun giderme](#-sorun-giderme)
+- [Sorun giderme](#️-sorun-giderme)
 - [Sık sorulan sorular](#-sık-sorulan-sorular)
-- [Proje yapısı](#-proje-yapısı)
+- [Proje yapısı](#️-proje-yapısı)
 - [Lisans](#-lisans)
 
 ---
@@ -32,19 +32,19 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 ## 🔍 Nasıl çalışır?
 
 ```
- Oyun görüntüsü          Ekranın altyazı           Metin tanıma           Yapay zekâ çevirisi        OBS
- (OBS / video)   ───▶   bölgesi yakalanır   ───▶   (Tesseract OCR)  ───▶  (NLLB-200, GPU)     ───▶  altyazi.txt
-                         her 120 ms'de bir          "Stay close, boy."     "Yakın dur, evlat."        ekrana yazar
+ PS5 ─HDMI─▶ Yakalama kartı ─USB─▶ OBS ──Sanal Kamera──▶ Uygulama ──▶ OBS Tarayıcı kaynağı
+                                                         │  OCR + çeviri      (oyunun üstünde
+                                                         │  "Stay close."      Türkçe altyazı)
+                                                         ▼  "Yakın dur."
 ```
 
-1. **Yakalama:** Seçtiğiniz ekran bölgesinin görüntüsü saniyede yaklaşık 8 kez alınır.
-2. **Değişim kontrolü:** Görüntüdeki yazı değişmediyse hiçbir şey yapılmaz. Böylece işlemci ve ekran kartı boşuna yorulmaz. Arkadaki oyun sahnesinin hareket etmesi bu kontrolü tetiklemez; yalnızca yazının kendisi takip edilir.
-3. **Metin tanıma (OCR):** Yazı değiştiyse görüntü temizlenir (beyaz yazı arka plandan ayrılır) ve [Tesseract](https://github.com/tesseract-ocr/tesseract) ile metne çevrilir.
-4. **Doğrulama:** Harf harf beliren altyazılar yarım çevrilmesin diye metin, görüntü durulana kadar beklenir. OCR'nin küçük okuma hataları (ör. `I'm` yerine `l'm`) yeni bir altyazı sayılmaz; bu sayede ekrandaki çeviri titremez.
-5. **Çeviri:** Metin, Meta'nın [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) modeliyle Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir, isim olduğu gibi kalır.
-6. **Gösterim:** Çeviri `altyazi.txt` dosyasına yazılır. OBS bu dosyayı okuyup yazıyı ekranda gösterir. Altyazı ekrandan kaybolunca çeviri de 1,3 saniye içinde silinir.
+1. **Görüntü:** Uygulama oyun görüntüsünü **OBS Sanal Kamera** üzerinden tam 1080p olarak alır. Ekrandaki pencereler araya giremez. İsterseniz ekranın bir bölgesini okuyan "Ekran" kaynağını da seçebilirsiniz.
+2. **Değişim kontrolü:** Saniyede yaklaşık 20 kez altyazı bölgesine bakılır. Yazı değişmediyse hiçbir şey yapılmaz; arkadaki oyun sahnesinin hareket etmesi bu kontrolü tetiklemez, yalnızca yazının kendisi takip edilir.
+3. **Metin tanıma (OCR):** Yazı değiştiyse görüntü temizlenir (beyaz yazı arka plandan ayrılır), yazının çevresinden kırpılır, en iyi okunan boyuta ölçeklenir ve [Tesseract](https://github.com/tesseract-ocr/tesseract) ile okunur. Tesseract'ın emin olmadığı kelimeler atılır; böylece altyazı yokken arka plandaki nesneler "altyazı" sanılmaz.
+4. **Çeviri:** Metin, Meta'nın [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) modeliyle hemen Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir. Harf harf beliren altyazılarda çeviri, yazı uzadıkça güncellenir.
+5. **Gösterim:** Çeviri, OBS'teki **Tarayıcı kaynağına anında** gönderilir. Her çeviri en az 1,5 saniye ekranda kalır; hızlı geçen bir altyazının ardından yenisi gelirse önceki çeviri onun üstünde soluk olarak bir süre daha görünür. Altyazı oyundan kaybolunca çeviri de silinir.
 
-**Hız:** Bir NVIDIA ekran kartında bir altyazının ekranda belirmesinden çevirinin görünmesine kadar geçen süre genellikle **0,5 – 1 saniyedir**.
+**Hız:** Bir NVIDIA ekran kartında, altyazının oyunda belirmesinden çevirinin ekranda görünmesine kadar geçen süre genellikle **0,35 – 0,65 saniyedir**. Ekranda yarım saniye kalan "Run!" gibi kısa altyazılar da yakalanır. Uygulama penceresindeki **Gecikme** değeri bu süreyi canlı gösterir.
 
 ---
 
@@ -55,9 +55,10 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 | **Windows 10 / 11** | Uygulama Windows için geliştirildi ve test edildi. |
 | **Python 3.10 veya üzeri** | Python 3.13 ile test edildi. |
 | **Tesseract OCR** | Ekrandaki yazıyı okuyan ücretsiz program. |
+| **OBS Studio** (28 veya üzeri) | Oyun görüntüsünü almak ve çeviriyi göstermek için. |
+| **HDMI yakalama kartı** | PS5 görüntüsünü bilgisayara almak için. Bkz. [PS5'i bağlama](#-ps5i-bağlama-hdmi-yakalama-kartı). |
 | **NVIDIA ekran kartı** *(önerilir)* | Ekran kartı olmadan da çalışır ama çeviri birkaç kat yavaşlar. |
 | **~3 GB boş disk alanı** | Çeviri modeli yaklaşık 2,5 GB yer kaplar. |
-| **OBS Studio** | Çeviriyi oyun görüntüsünün üstünde göstermek için. |
 
 ---
 
@@ -142,44 +143,82 @@ hf download facebook/nllb-200-distilled-600M --local-dir "C:\AI-Models\nllb-200"
 python cevirici_gui.py
 ```
 
-🎉 Kurulum tamamlandı!
+🎉 Kurulum tamamlandı! Sıradaki adım PS5'i bağlamak ve OBS'i ayarlamak.
 
 ---
 
-## 🕹️ Kullanım
+## 🎮 PS5'i bağlama (HDMI yakalama kartı)
 
-Uygulama, oyuna başlamadan önce bir kez ayarlayıp küçülttüğünüz bir kontrol paneli olarak tasarlandı.
+```
+PS5 ──HDMI──▶ Yakalama kartı ──USB──▶ Bilgisayar ──HDMI──▶ TV / Monitör
+                                     (OBS: oyun + Türkçe altyazı)
+```
 
-1. **Oyun görüntüsünü ekranda açın.** Bu bir OBS önizlemesi, yakalama kartı görüntüsü ya da bir YouTube videosu olabilir.
-2. **"Alan Seç"** düğmesine basın. Ekran kararır.
-3. Fareyle **altyazının çıktığı bandı** çizin. İpuçları:
-   - Soldan sağa, en uzun altyazıyı alacak kadar geniş tutun.
-   - Yüksekliği bir-iki satır yazıyı alacak kadar tutun. Gereğinden büyük bir alan OCR'yi yavaşlatır.
-   - Vazgeçmek için **ESC**'ye ya da **sağ tık**'a basın.
-   - Birden fazla monitörünüz varsa hepsinde seçim yapabilirsiniz.
-4. **"▶ Başlat"** düğmesine basın.
-   - İlk açılışta model yaklaşık 20 saniyede yüklenir; bu sırada rozette **"Yükleniyor"** yazar.
-   - Model hazır olunca rozet **"CUDA · Hazır"** (ya da **"CPU · Hazır"**) olur.
-   - Pencere birkaç saniye sonra kendiliğinden görev çubuğuna küçülür.
-5. Oynayın! Çeviriler OBS'te görünür.
-6. İşiniz bitince pencereyi görev çubuğundan açıp **"■ Durdur"**'a basın ya da pencereyi kapatın.
+Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı olur ve OBS oyunu altyazıyla birlikte tam ekran gösterir.
 
-Seçtiğiniz alan kaydedilir; bir sonraki açılışta doğrudan **Başlat**'a basabilirsiniz.
+**Kart seçerken:**
+- **USB 3.0** ve **1080p 60fps** desteği olmalı. USB 2.0 kartlar görüntüyü sıkıştırır; TV'deki görüntü bulanıklaşır.
+- İçinde **MS2130** çipi olan ucuz kartlar bu iş için yeterlidir (ör. *VegGieg V-Z632*, bu projeyle test edildi).
+- ⚠️ **"USB-C → HDMI"** çeviriciler ve **USB-C hub**'lar yakalama kartı **değildir**: görüntüyü dışarı verirler, içeri alamazlar. Kutuda **"Video Capture"** yazmalı.
+- Takınca Windows'ta kamera olarak görünür (ör. "V-Z632" ya da "USB Video").
+
+**PS5 ayarları** (*Ayarlar → Ekran ve Video*):
+- **Çözünürlük: 1080p**
+- **HDR: Kapalı** (kartlar HDR aktarmaz; açık kalırsa renkler soluk görünür)
+- Görüntü siyah gelirse: *Ayarlar → Sistem → HDMI → **HDCP'yi Etkinleştir**: Kapalı*
+
+**Oyun ayarlarında** (OCR'nin daha iyi okuması için):
+- **Altyazı: Açık**, **boyut: Büyük**
+- **Altyazı arka planı: Açık** (varsa; en büyük farkı bu yaratır)
+
+> ℹ️ **PS Remote Play** görüntüsü korumalıdır ve yakalama yazılımlarına siyah görünür. Bu yüzden Remote Play ile çalışmaz; yakalama kartı gerekir.
 
 ---
 
 ## 📺 OBS ayarı
 
-1. OBS'te **Kaynaklar** bölümünde **+** düğmesine basın ve **Metin (GDI+)** seçin.
-2. **Dosyadan oku** kutusunu işaretleyin.
-3. **Metin dosyası** olarak proje klasöründeki `altyazi.txt` dosyasını seçin.
-4. Yazı tipini, boyutunu ve rengini istediğiniz gibi ayarlayın. Okunabilirlik için öneriler:
-   - Kalın bir yazı tipi (ör. *Segoe UI Bold*, 40–56 pt)
-   - **Anahat** (outline) açık, siyah, 4–6 px
-   - Gerekirse yarı saydam bir **arka plan**
-5. Metni ekranın altına, orijinal altyazının biraz üstüne yerleştirin.
+### 1. Oyun görüntüsü
+1. **Kaynaklar → + → Video Yakalama Aygıtı** → yakalama kartınızı seçin.
+2. Kaynağa sağ tık → **Özellikler**: **Çözünürlük/FPS Türü: Özel**, **1920x1080**, **60 FPS**, **Video Biçimi: YUY2**.
 
-> 💡 Uygulama dosyayı her seferinde tek hamlede değiştirir; OBS hiçbir zaman yarım yazılmış bir çeviri göstermez.
+### 2. Oyun sesi
+1. **Kaynaklar → + → Ses Girişi Yakalama** → kartın ses aygıtını seçin (ör. *Dijital Ses Arabirimi (V-Z632)*).
+2. Ses karıştırıcıda **⚙ → Gelişmiş Ses Özellikleri** → bu kaynağın **Ses İzleme** ayarını **"Ekran ve Çıkış"** yapın.
+3. **Masaüstü Ses** satırını **"Ekran Kapalı"** bırakın, yoksa yankı olur.
+
+### 3. Sanal kamera (uygulamanın görüntüyü alacağı yer)
+1. OBS'in sağ alt köşesindeki **Sanal Kamerayı Başlat** düğmesine basın.
+2. Yanındaki **⚙** düğmesine basın → **Çıktı Türü: Kaynak** → **Video Yakalama Aygıtı**.
+   Böylece uygulama yalnızca oyun görüntüsünü görür, OBS'te üste eklediğiniz Türkçe altyazıyı değil.
+
+### 4. Türkçe altyazı
+1. **Kaynaklar → + → Tarayıcı** → URL: **`http://127.0.0.1:8765`**, **Genişlik 1920**, **Yükseklik 1080**.
+2. Kaynak listesinde **Tarayıcı** kaynağının **Video Yakalama Aygıtı**'nın **üstünde** olduğundan emin olun.
+3. Yazı boyutunu ve konumunu URL ile ayarlayabilirsiniz: `http://127.0.0.1:8765/?size=52&bottom=18`
+   - `size`: yazı boyutu (piksel, varsayılan 46)
+   - `bottom`: alttan uzaklık (ekran yüksekliğinin yüzdesi, varsayılan 14)
+
+> Tarayıcı kaynağı, çeviriyi beklemeden anında gösterir. Eski **Metin (GDI+) → Dosyadan oku → `altyazi.txt`** yöntemi de çalışır, ancak OBS dosyayı saniyede bir kontrol ettiği için kısa altyazıları kaçırabilir.
+
+### 5. TV'de tam ekran
+Önizlemeye sağ tık → **Tam Ekran Projektör** → TV'yi seçin. TV'yi **Oyun Modu**'na almayı unutmayın.
+
+---
+
+## 🕹️ Kullanım
+
+1. OBS'te **Sanal Kamerayı Başlat**'a basılı olduğundan emin olun.
+2. `python cevirici_gui.py` ile uygulamayı açın. **Görüntü kaynağı: OBS Sanal Kamera** seçili olsun.
+3. Oyunda altyazının göründüğü bir sahneye gelin ve **Alan Seç**'e basın. Oyun görüntüsünden bir kare açılır.
+4. Fareyle **altyazının çıktığı bandı** çizin:
+   - Soldan sağa, en uzun altyazıyı alacak kadar geniş tutun.
+   - Yüksekliği iki satır yazıyı alacak kadar tutun.
+   - Vazgeçmek için **ESC**'ye ya da **sağ tık**'a basın.
+   - OBS logosu görüyorsanız sanal kamera başlatılmamıştır.
+5. **▶ Başlat**'a basın. İlk açılışta model yaklaşık 20 saniyede yüklenir; rozet **"CUDA · Hazır"** olunca pencere kendiliğinden küçülür.
+6. Oynayın! İşiniz bitince pencereyi açıp **■ Durdur**'a basın ya da kapatın.
+
+Seçtiğiniz alan kaydedilir; bir sonraki açılışta doğrudan **Başlat**'a basabilirsiniz.
 
 ---
 
@@ -188,9 +227,8 @@ Seçtiğiniz alan kaydedilir; bir sonraki açılışta doğrudan **Başlat**'a b
 Oyunu bağlamadan önce kurulumunuzun çalıştığını görmek için projeyle birlikte bir test sayfası gelir:
 
 1. `test_altyazi.html` dosyasına çift tıklayıp tarayıcıda açın, **F11** ile tam ekran yapın.
-2. Sayfada, oyun sahnesi gibi sürekli değişen bir arka planın üstünde İngilizce altyazılar belirir. Her üçüncü altyazı harf harf yazılır.
-3. Uygulamada **Alan Seç** ile altyazı bandını seçin ve **Başlat**'a basın.
-4. Pencerede **EN** satırında İngilizce metni, **TR** satırında çevirisini görmelisiniz:
+2. Uygulamada **Görüntü kaynağı: Ekran** seçin, **Alan Seç** ile altyazı bandını çizin ve **Başlat**'a basın.
+3. Pencerede **EN** satırında İngilizce metni, **TR** satırında çevirisini görmelisiniz:
 
 | EN | TR |
 |---|---|
@@ -198,42 +236,23 @@ Oyunu bağlamadan önce kurulumunuzun çalıştığını görmek için projeyle 
 | We need to leave before the guards come back. | Muhafızlar dönmeden gitmeliyiz. |
 | Atreus: Father, look! There is something in the water. | Atreus: Baba, bak, suda bir şey var. |
 
-YouTube'da altyazılı bir oyun videosu açarak da test edebilirsiniz.
-
----
-
-## 🎮 PS5'i bağlama (HDMI yakalama kartı)
-
-> 🚧 **Bu bölüm geliştirme aşamasında.** Yakalama kartıyla yapılan testler tamamlandıkça güncellenecek.
-
-Uygulama ekranda görünen her şeyi okuyabildiği için PS5 görüntüsünü bilgisayar ekranına getirmeniz yeterli. Önerilen kurulum:
-
-```
-PS5 ──HDMI──▶ Yakalama kartı ──USB──▶ Bilgisayar (OBS: Video Yakalama Aygıtı)
-                     │
-                     └──HDMI çıkış (passthrough)──▶ TV / Monitör
-```
-
-1. **PS5'te HDCP'yi kapatın:** *Ayarlar → Sistem → HDMI → HDCP'yi Etkinleştir* seçeneğini kapatın. Açık kalırsa yakalama kartı siyah ekran gösterir.
-2. OBS'te **Video Yakalama Aygıtı** kaynağı ekleyip yakalama kartınızı seçin.
-3. OBS önizlemesini ya da **Projektör** penceresini ekranda açın.
-4. Uygulamada **Alan Seç** ile oyunun altyazı bölgesini seçin ve **Başlat**'a basın.
-
-> ℹ️ **PS Remote Play** görüntüsü korumalıdır ve ekran yakalama yazılımlarına siyah görünür. Bu yüzden Remote Play ile çalışmaz; yakalama kartı gerekir.
-
 ---
 
 ## ⚙️ Ayarlar
 
-Uygulama ayarlarını proje klasöründeki `ayarlar.json` dosyasında tutar. Bu dosya ilk alan seçiminde otomatik oluşturulur. Örnek bir dosya için [`ayarlar.example.json`](ayarlar.example.json) dosyasına bakabilirsiniz.
+Uygulama ayarlarını proje klasöründeki `ayarlar.json` dosyasında tutar. Bu dosya ilk alan seçiminde otomatik oluşturulur. Örnek için [`ayarlar.example.json`](ayarlar.example.json) dosyasına bakın.
 
 | Ayar | Varsayılan | Ne işe yarar? |
 |---|---|---|
-| `region` | — | Seçilen altyazı alanı. **Alan Seç** ile otomatik yazılır. |
+| `source` | `camera` | Görüntü kaynağı: `camera` (OBS Sanal Kamera) ya da `screen` (ekran bölgesi). Arayüzden seçilir. |
+| `camera` | `OBS Virtual Camera` | Okunacak kameranın adı. Yakalama kartını doğrudan okumak için kartın adını yazabilirsiniz (OBS kartı kullanmıyorsa). |
+| `camera_region` / `region` | — | Seçilen altyazı alanı. **Alan Seç** ile otomatik yazılır. |
 | `tesseract` | `C:\Program Files\Tesseract-OCR\tesseract.exe` | Tesseract'ın yolu. Bulunamazsa sistem `PATH`'inde aranır. |
 | `model` | `C:\AI-Models\nllb-200` | Çeviri modelinin klasörü. Klasör yoksa model HuggingFace'ten indirilir. |
 | `text_mode` | `light` | Altyazının rengi: `light` (beyaz/açık yazı — çoğu oyun), `dark` (koyu yazı), `none` (görüntü temizleme kapalı). |
 | `threshold` | `170` | Yazıyı arka plandan ayırma eşiği (0–255). |
+| `min_confidence` | `60` | Tesseract'ın bu puanın altında okuduğu kelimeler atılır (0–100). |
+| `overlay_port` | `8765` | OBS Tarayıcı kaynağının adresindeki port. |
 
 **`threshold` nasıl ayarlanır?**
 - Altyazı **okunmuyor** ya da eksik okunuyorsa → değeri **düşürün** (ör. `140`).
@@ -244,6 +263,27 @@ Ayarı değiştirdikten sonra uygulamayı yeniden başlatın.
 ---
 
 ## 🛠️ Sorun giderme
+
+<details>
+<summary><b>"OBS Virtual Camera bulunamadı" ya da alan seçerken OBS logosu görünüyor</b></summary>
+
+OBS açık değil ya da sanal kamera başlatılmamış. OBS'in sağ altındaki **Sanal Kamerayı Başlat** düğmesine basın. OBS 28 veya üzeri gerekir.
+</details>
+
+<details>
+<summary><b>Çeviri OBS'te görünmüyor</b></summary>
+
+- Tarayıcı kaynağının URL'si `http://127.0.0.1:8765` mi? Uygulama penceresinin altında doğru adres yazar.
+- Tarayıcı kaynağı, kaynak listesinde oyun görüntüsünün **üstünde** mi?
+- Uygulama **Başlat**'a basılmış ve rozet **Hazır** mı?
+- Uygulama iki kez açıksa ikincisi bu adresi kullanamaz; birini kapatın.
+</details>
+
+<details>
+<summary><b>Kendi Türkçe altyazımı tekrar okuyup çeviriyor</b></summary>
+
+Sanal kamera tüm sahneyi (üstteki Türkçe altyazıyla birlikte) gönderiyor. Sanal kameranın **⚙ → Çıktı Türü** ayarını **Kaynak → Video Yakalama Aygıtı** yapın.
+</details>
 
 <details>
 <summary><b>"Tesseract bulunamadı" hatası alıyorum</b></summary>
@@ -267,12 +307,13 @@ PyTorch'un ekran kartı destekli sürümü kurulu değil. [5. adımdaki](#5-ekra
 - Seçtiğiniz alanın altyazıyı tamamen kapsadığından emin olun. Alanı yeniden, biraz daha geniş seçin.
 - `threshold` değerini düşürün (ör. `140`).
 - Oyununuzun altyazıları koyu renkliyse `text_mode` değerini `dark` yapın.
+- Oyunda altyazı boyutunu büyütün ve varsa altyazı arka planını açın.
 </details>
 
 <details>
 <summary><b>EN satırında anlamsız karakterler çıkıyor</b></summary>
 
-Arka plandaki parlak alanlar yazı sanılıyor. `threshold` değerini yükseltin (ör. `200`) ve alanı yalnızca altyazı bandını kapsayacak şekilde daraltın.
+Arka plandaki parlak alanlar yazı sanılıyor. `threshold` değerini yükseltin (ör. `200`), alanı yalnızca altyazı bandını kapsayacak şekilde daraltın ya da `min_confidence` değerini yükseltin (ör. `75`).
 </details>
 
 <details>
@@ -286,15 +327,9 @@ python -m pip install "huggingface-hub>=0.34,<1.0"
 </details>
 
 <details>
-<summary><b>Seçtiğim alan ile okunan alan farklı görünüyor</b></summary>
+<summary><b>Yakalama kartı Windows'ta görünmüyor</b></summary>
 
-Uygulama Windows ekran ölçeklendirmesini (%125, %150...) dikkate alır. Uygulamanın eski bir sürümünü kullandıysanız kayıtlı alan kaymış olabilir; **Alan Seç** ile alanı bir kez yeniden seçin.
-</details>
-
-<details>
-<summary><b>OCR süresi yüksek (200 ms üzeri)</b></summary>
-
-Seçtiğiniz alan büyük olabilir. Alanı yalnızca altyazı bandını kapsayacak kadar daraltın; yüksekliği 100–150 pikseli geçmesin.
+Elinizdeki cihaz bir USB-C hub ya da HDMI çevirici olabilir; bunlar görüntü yakalayamaz. Gerçek bir yakalama kartı, takıldığında Windows'un **Kamera** uygulamasında ayrı bir kamera olarak görünür.
 </details>
 
 ---
@@ -302,7 +337,7 @@ Seçtiğiniz alan büyük olabilir. Alanı yalnızca altyazı bandını kapsayac
 ## ❓ Sık sorulan sorular
 
 **İnternet bağlantısı gerekiyor mu?**
-Yalnızca kurulum ve modelin ilk indirilmesi için. Sonrasında uygulama tamamen çevrimdışı çalışır; hiçbir metin dışarı gönderilmez.
+Yalnızca kurulum ve modelin ilk indirilmesi için. Sonrasında uygulama tamamen çevrimdışı çalışır; hiçbir metin dışarı gönderilmez. Tarayıcı kaynağının adresi yalnızca bu bilgisayardan erişilebilir (`127.0.0.1`).
 
 **Hangi dillerden çeviri yapıyor?**
 Şu an yalnızca İngilizceden Türkçeye. NLLB-200 modeli 200 dili desteklediği için ileride başka diller de eklenebilir.
@@ -311,10 +346,10 @@ Yalnızca kurulum ve modelin ilk indirilmesi için. Sonrasında uygulama tamamen
 Günlük konuşma dilindeki kısa cümlelerde oldukça iyi. Oyuna özgü terimlerde, isimlerde ve çok uzun cümlelerde hatalar olabilir. Çevrimdışı ve anlık çalışan bir model için iyi bir denge sunar.
 
 **Oyunu yavaşlatır mı?**
-Çeviri ekran kartında birkaç yüz milisaniye sürer ve yalnızca altyazı değiştiğinde çalışır. PS5 ile oynarken bilgisayarınızın performansı oyunu etkilemez.
+Hayır. PS5 kendi donanımında çalışır; bilgisayar yalnızca altyazı değiştiğinde OCR ve çeviri yapar.
 
 **Mac veya Linux'ta çalışır mı?**
-Kod büyük ölçüde platformdan bağımsızdır ama yalnızca Windows'ta test edildi.
+Kod büyük ölçüde platformdan bağımsızdır ama yalnızca Windows'ta test edildi. Sanal kamera araması Windows'a özgüdür.
 
 ---
 
@@ -322,8 +357,9 @@ Kod büyük ölçüde platformdan bağımsızdır ama yalnızca Windows'ta test 
 
 ```
 ps5-altyazi-cevirici/
-├── cevirici_gui.py        # Arayüz (PySide6): kontrol paneli ve alan seçici
-├── motor.py               # Motor: ekran yakalama, OCR, çeviri, altyazi.txt'ye yazma
+├── cevirici_gui.py        # Arayüz (PySide6): kontrol paneli ve alan seçiciler
+├── motor.py               # Motor: görüntü alma, OCR, çeviri, gösterim
+├── overlay.py             # OBS Tarayıcı kaynağı için altyazı sayfası (anlık gösterim)
 ├── test_altyazi.html      # Kurulumu denemek için test sayfası
 ├── ayarlar.example.json   # Örnek ayar dosyası
 ├── requirements.txt       # Python paketleri
@@ -339,9 +375,9 @@ ps5-altyazi-cevirici/
 
 Hata bildirimleri, öneriler ve katkılar memnuniyetle karşılanır! Bir sorunla karşılaşırsanız [Issues](https://github.com/GokhanGuclu/ps5-altyazi-cevirici/issues) bölümünde bildirebilirsiniz. Bildirirken şunları eklemeniz çok yardımcı olur:
 
-- Uygulama penceresinin ekran görüntüsü (rozet ve OCR / Çeviri süreleriyle birlikte)
-- Hangi oyunu ya da videoyu kullandığınız
-- `ayarlar.json` içindeki `text_mode` ve `threshold` değerleri
+- Uygulama penceresinin ekran görüntüsü (rozet ve Gecikme / OCR / Çeviri süreleriyle birlikte)
+- Hangi oyunu oynadığınız ve yakalama kartınızın modeli
+- `ayarlar.json` içindeki `text_mode`, `threshold` ve `min_confidence` değerleri
 
 ---
 

@@ -1,7 +1,12 @@
 {
+  "source": "camera",
+  "camera": "OBS Virtual Camera",
+  "camera_region": null,
   "region": null,
   "tesseract": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
   "model": "C:\\AI-Models\\nllb-200",
   "text_mode": "light",
-  "threshold": 170
+  "threshold": 170,
+  "min_confidence": 60,
+  "overlay_port": 8765
 }
