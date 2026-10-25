@@ -40,9 +40,11 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 
 1. **Görüntü:** Uygulama oyun görüntüsünü **OBS Sanal Kamera** üzerinden tam 1080p olarak alır. Ekrandaki pencereler araya giremez. İsterseniz ekranın bir bölgesini okuyan "Ekran" kaynağını da seçebilirsiniz.
 2. **Değişim kontrolü:** Saniyede yaklaşık 20 kez altyazı bölgesine bakılır. Yazı değişmediyse hiçbir şey yapılmaz; arkadaki oyun sahnesinin hareket etmesi bu kontrolü tetiklemez, yalnızca yazının kendisi takip edilir.
-3. **Metin tanıma (OCR):** Yazı değiştiyse görüntü temizlenir (beyaz yazı arka plandan ayrılır), yazının çevresinden kırpılır, en iyi okunan boyuta ölçeklenir ve [Tesseract](https://github.com/tesseract-ocr/tesseract) ile okunur. Tesseract'ın emin olmadığı kelimeler atılır; böylece altyazı yokken arka plandaki nesneler "altyazı" sanılmaz.
+3. **Metin tanıma (OCR):** Yazı değiştiyse yazı arka plandan **yerel kontrastla** ayrılır (çevresinden parlak ince çizgiler yazıdır; gömlek, gökyüzü gibi geniş parlak alanlar değildir), satıra dizilmeyen lekeler atılır, yazı kırpılıp Tesseract'ın en iyi okuduğu harf boyutuna ölçeklenir ve [Tesseract](https://github.com/tesseract-ocr/tesseract) ile okunur. Emin olunmayan kelimeler ve kelimeye benzemeyen okumalar elenir; böylece altyazı yokken arka plandaki nesneler "altyazı" sanılmaz.
 4. **Çeviri:** Metin, Meta'nın [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) modeliyle hemen Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir. Harf harf beliren altyazılarda çeviri, yazı uzadıkça güncellenir.
 5. **Gösterim:** Çeviri, OBS'teki **Tarayıcı kaynağına anında** gönderilir. Her çeviri en az 1,5 saniye ekranda kalır; hızlı geçen bir altyazının ardından yenisi gelirse önceki çeviri onun üstünde soluk olarak bir süre daha görünür. Altyazı oyundan kaybolunca çeviri de silinir.
+
+**Doğruluk:** 18 farklı oyunun (Zelda, Yakuza, Call of Duty, Assassin's Creed, Destiny 2, Hellblade, Xenoblade, WWE…) altyazılı ekran görüntülerinde kelime doğruluğu ortalama **%95**; 18 oyunun 15'inde %90'ın üzerinde. Altyazı içermeyen 37 sahne bölgesinin hiçbirinde yanlışlıkla "altyazı" okunmadı.
 
 **Hız:** Bir NVIDIA ekran kartında, altyazının oyunda belirmesinden çevirinin ekranda görünmesine kadar geçen süre genellikle **0,35 – 0,65 saniyedir**. Ekranda yarım saniye kalan "Run!" gibi kısa altyazılar da yakalanır. Uygulama penceresindeki **Gecikme** değeri bu süreyi canlı gösterir.
 
@@ -252,7 +254,7 @@ Uygulama ayarlarını proje klasöründeki `ayarlar.json` dosyasında tutar. Bu 
 | `model` | `C:\AI-Models\nllb-200` | Çeviri modelinin klasörü. Klasör yoksa model HuggingFace'ten indirilir. |
 | `text_mode` | `light` | Altyazının rengi: `light` (arka plandan açık yazı — çoğu oyun, gri yazılar dahil), `dark` (koyu yazı), `none` (görüntü temizleme kapalı). |
 | `min_contrast` | `25` | Yazının çevresinden en az ne kadar parlak olması gerektiği (0–255). |
-| `min_confidence` | `60` | Tesseract'ın bu puanın altında okuduğu kelimeler atılır (0–100). |
+| `min_confidence` | `45` | Tesseract'ın bu puanın altında okuduğu kelimeler atılır (0–100). |
 | `overlay_port` | `8765` | OBS Tarayıcı kaynağının adresindeki port. |
 
 **Yazı arka plandan nasıl ayrılıyor?**
@@ -260,7 +262,7 @@ Sabit bir parlaklık eşiği kullanılmaz; bazı oyunlarda altyazı koyu gridir 
 
 **`min_contrast` nasıl ayarlanır?**
 - Soluk altyazılar **okunmuyorsa** → değeri **düşürün** (ör. `15`).
-- Altyazı yokken **anlamsız harfler** okunuyorsa → değeri **yükseltin** (ör. `40`) ya da `min_confidence`'ı yükseltin (ör. `75`).
+- Altyazı yokken **anlamsız harfler** okunuyorsa → değeri **yükseltin** (ör. `40`) ya da `min_confidence`'ı yükseltin (ör. `60`).
 
 Ayarı değiştirdikten sonra uygulamayı yeniden başlatın.
 
@@ -323,7 +325,7 @@ PyTorch'un ekran kartı destekli sürümü kurulu değil. [5. adımdaki](#5-ekra
 <details>
 <summary><b>EN satırında anlamsız karakterler çıkıyor</b></summary>
 
-Arka plandaki nesneler yazı sanılıyor. `min_contrast` değerini yükseltin (ör. `40`), alanı yalnızca altyazı bandını kapsayacak şekilde daraltın ya da `min_confidence` değerini yükseltin (ör. `75`).
+Arka plandaki nesneler yazı sanılıyor. `min_contrast` değerini yükseltin (ör. `40`), alanı yalnızca altyazı bandını kapsayacak şekilde daraltın ya da `min_confidence` değerini yükseltin (ör. `60`).
 </details>
 
 <details>

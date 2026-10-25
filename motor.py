@@ -38,7 +38,7 @@ DEFAULTS = {
     'model': r'C:\AI-Models\nllb-200',
     'text_mode': 'light',  # light: acik renk yazi, dark: koyu renk yazi, none: esikleme yok
     'min_contrast': 25,    # yazinin cevresinden en az bu kadar parlak (koyu) olmasi gerekir
-    'min_confidence': 60,  # Tesseract'in bu puanin altinda okudugu kelimeler atilir
+    'min_confidence': 45,  # Tesseract'in bu puanin altinda okudugu kelimeler atilir
     'overlay_port': 8765,  # OBS Tarayici kaynagi: http://127.0.0.1:8765
 }
 POLL = 0.05          # goruntu kontrol araligi (sn)
@@ -50,8 +50,9 @@ KEEP_PREVIOUS = 2.5  # yeni altyazi gelince, bundan kisa sure gorunmus onceki ce
 SIMILAR = 0.9        # bu oranin ustundeki iki okuma ayni metin sayilir
 CACHE_SIZE = 500
 TEXT_KERNEL = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))  # harf kalinligindan genis
-OCR_LINE_HEIGHT = 20     # OCR'den once her satir bu yukseklige olceklenir (px)
+OCR_LETTER_HEIGHT = 16   # OCR'den once harfler bu yukseklige olceklenir (px)
 CAMERA_SIZE = (1920, 1080)
+WORD = re.compile(r"[\"'“‘(\[*-]*[A-Za-z0-9][A-Za-z0-9'’.-]*[.,!?:;…)\]\"'”’*]*")
 SPEAKER = re.compile(r"^((?:[A-Z][\w'.-]*\s?){1,3}):\s*(.+)$")
 
 
@@ -255,6 +256,7 @@ def keep_text_components(ink):
 def clean_text(raw):
     text = re.sub(r'(\w)-\s*\n\s*(\w)', r'\1\2', raw)  # satir sonu tirelemesi
     text = ' '.join(text.split())
+    text = re.sub(r'(?<![^\s.,!?;:])\|(?=\s|$)', 'I', text)  # tek basina "|" aslinda "I" zamiridir
     return text.strip(' |_~')  # Tesseract'in kenarlarda urettigi cop karakterler
 
 
@@ -270,38 +272,50 @@ def crop_to_ink(image, pad=12):
                  max(0, cols[0] - pad):min(w, cols[-1] + pad + 1)]
 
 
-def text_lines(image, min_height=8, gap=4):
-    """Kirpilmis goruntudeki yazi satirlarinin (ust, alt) sinirlari."""
-    rows = (image < 128).sum(axis=1) > 2
-    lines, start, blank = [], None, 0
-    for y, has_ink in enumerate(rows):
-        if has_ink:
-            start = y if start is None else start
-            blank = 0
-        elif start is not None:
-            blank += 1
-            if blank >= gap:
-                lines.append((start, y - blank + 1))
-                start, blank = None, 0
-    if start is not None:
-        lines.append((start, len(rows)))
-    return [(a, b) for a, b in lines if b - a >= min_height]
+def text_lines(image):
+    """Goruntudeki yazi satirlarinin (ust, alt) sinirlari.
+    Piksel yogunluguna degil harflerin dikey merkezlerine bakilir: birbirine cok yakin iki
+    satir birlesmez (kuyruklu harfler araya girse de), tek kelimelik satir da kaybolmaz."""
+    ink = (image < 128).astype(np.uint8)
+    stats = cv2.connectedComponentsWithStats(ink, connectivity=8)[2][1:]
+    stats = [s for s in stats if s[3] >= 4]
+    if not stats:
+        return []
+    height = float(np.median([s[3] for s in stats]))
+    letters = sorted((s for s in stats if s[3] >= 0.6 * height), key=lambda s: s[1] + s[3] / 2)
+    groups, current = [], []
+    for s in letters:
+        if current and (s[1] + s[3] / 2) - (current[-1][1] + current[-1][3] / 2) > 0.7 * height:
+            groups.append(current)
+            current = []
+        current.append(s)
+    if current:
+        groups.append(current)
+    return [(min(s[1] for s in g), max(s[1] + s[3] for s in g)) for g in groups if len(g) >= 2]
+
+
+def letter_height(image):
+    """Tipik harf yuksekligi: murekkep parcalarinin yuksekliklerinin medyani."""
+    ink = (image < 128).astype(np.uint8)
+    stats = cv2.connectedComponentsWithStats(ink, connectivity=8)[2][1:]
+    heights = [h for h in stats[:, 3] if h >= 4] if len(stats) else []
+    return float(np.median(heights)) if heights else float(image.shape[0])
 
 
 def normalize_text_size(image):
-    """Kirpilmis yaziyi Tesseract'in en iyi okudugu satir yuksekligine olcekler.
-    Olcum: kisa altyazilarda ("Run!") 20 px satir yuksekligi en yuksek dogrulugu verdi;
-    daha buyuk yazida Tesseract kisa kelimeleri hic gormeyebiliyor."""
+    """Kirpilmis yaziyi Tesseract'in en iyi okudugu harf yuksekligine olcekler.
+    Olcum: cok buyuk yazida Tesseract kisa kelimeleri ("Run!") hic gormeyebiliyor, cok
+    kucukte harfleri karistiriyor. Satir yuksekligi yerine harf yuksekligi kullanilir;
+    birbirine cok yakin iki satir tek satir sanilip yazi kuculmesin."""
     image = crop_to_ink(image, pad=0)
     if image is None:
         return None
-    lines = text_lines(image) or [(0, image.shape[0])]
-    factor = OCR_LINE_HEIGHT / float(np.median([b - a for a, b in lines]))
+    factor = OCR_LETTER_HEIGHT / letter_height(image)
     if abs(factor - 1) > 0.1:
         image = cv2.resize(image, None, fx=factor, fy=factor,
                            interpolation=cv2.INTER_AREA if factor < 1 else cv2.INTER_CUBIC)
         image = cv2.threshold(image, 128, 255, cv2.THRESH_BINARY)[1]
-    pad = OCR_LINE_HEIGHT // 2
+    pad = OCR_LETTER_HEIGHT
     return cv2.copyMakeBorder(image, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=255)
 
 
@@ -318,7 +332,7 @@ def read_text(image, min_confidence):
     text = ocr_words(image, min_confidence, 6)
     if text:
         return text
-    h, pad = image.shape[0], OCR_LINE_HEIGHT // 2
+    h, pad = image.shape[0], OCR_LETTER_HEIGHT
     return clean_text('\n'.join(ocr_words(image[max(0, a - pad):min(h, b + pad)], min_confidence, 7)
                                 for a, b in lines))
 
@@ -337,14 +351,19 @@ def ocr_words(image, min_confidence, psm):
 
 
 def looks_like_text(text):
-    # Arka plandaki nesnelerden cikan "a) A, a" gibi okumalari eler ("No, no." gibi kisa
-    # gercek altyazilar kalir): en az iki harfli bir kelime olmali, harf/rakam/noktalama
-    # disindaki isaretler az olmali. Gerisini Tesseract'in guven puani eler.
-    if not any(len(re.sub(r'[^A-Za-z]', '', w)) >= 2 for w in text.split()):
+    # Arka plandaki nesnelerden cikan "& i Ne. . t ; wl" gibi okumalari eler ("No, no." gibi
+    # kisa gercek altyazilar kalir): parcalarin cogu kelime gibi olmali (harflerden olusan,
+    # yalnizca kenarlarinda noktalama tasiyan) ve en az bir parca iki harfli olmali.
+    # Tek basina "-", "*", "..." gibi isaretler (diyalog cizgisi, sarki yildizi) hesaba katilmaz;
+    # "I" ve "a" disindaki tek karakterlik parcalar kelime sayilmaz.
+    tokens = [t for t in text.split() if not re.fullmatch(r'[-*.…—–]+', t)]
+    if not tokens:
         return False
-    chars = text.replace(' ', '')
-    junk = sum(not (c.isalnum() or c in ".,!?'\"-:;*()") for c in chars)
-    return junk <= 0.2 * len(chars)
+    words = [t for t in tokens if WORD.fullmatch(t) and
+             (sum(c.isalnum() for c in t) >= 2 or t.strip('"\'“”‘’.,!?:;()[]*') in ('I', 'a', 'A'))]
+    if not any(sum(c.isalpha() for c in w) >= 2 for w in words):
+        return False
+    return len(words) >= 0.75 * len(tokens)
 
 
 def similar(a, b):

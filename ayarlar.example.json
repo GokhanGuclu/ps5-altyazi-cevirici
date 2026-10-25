@@ -7,6 +7,6 @@
   "model": "C:\\AI-Models\\nllb-200",
   "text_mode": "light",
   "min_contrast": 25,
-  "min_confidence": 60,
+  "min_confidence": 45,
   "overlay_port": 8765
 }
