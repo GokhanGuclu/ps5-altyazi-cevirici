@@ -452,6 +452,7 @@ class Engine:
         self.failed = False
         self.lines = []  # ekrandaki ceviriler: [metin, gosterilme zamani]
         self.overlay = None
+        self.overlay_error = None
 
     def ui(self, **values):
         self.on_update(values)
@@ -481,10 +482,14 @@ class Engine:
                     "Yolu ayarlar.json içindeki 'tesseract' alanına yazın.")
         pytesseract.pytesseract.tesseract_cmd = tesseract
         if self.overlay is None:
+            port = int(self.config['overlay_port'])
             try:
-                self.overlay = OverlayServer(int(self.config['overlay_port']))
+                self.overlay = OverlayServer(port)
+                self.overlay_error = None
             except OSError:  # port dolu (ornegin uygulama iki kez acik): yalnizca altyazi.txt kullanilir
                 self.overlay = None
+                self.overlay_error = (f'Altyazı sayfası başlatılamadı: {port} portunu başka bir program '
+                                      "kullanıyor (uygulama iki kez açık olabilir). OBS'te altyazı görünmez.")
         with self.gen_lock:
             self.lines = []
             self.publish()

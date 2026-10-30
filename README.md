@@ -194,9 +194,12 @@ Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı
    Böylece uygulama yalnızca oyun görüntüsünü görür, OBS'te üste eklediğiniz Türkçe altyazıyı değil.
 
 ### 4. Türkçe altyazı
-1. **Kaynaklar → + → Tarayıcı** → URL: **`http://127.0.0.1:8765`**, **Genişlik 1920**, **Yükseklik 1080**.
-2. Kaynak listesinde **Tarayıcı** kaynağının **Video Yakalama Aygıtı**'nın **üstünde** olduğundan emin olun.
-3. Türkçe yazı koyu bir kutu içinde gösterilir; kutu oyunun İngilizce altyazısını örter. Görünümü URL ile ayarlayabilirsiniz: `http://127.0.0.1:8765/?size=52&bottom=18&bg=0.8`
+1. **Kaynaklar → + → Tarayıcı** ekleyin.
+2. **Yerel dosya** kutusunu işaretleyin ve proje klasöründeki **`altyazi_sayfasi.html`** dosyasını seçin. **Genişlik 1920**, **Yükseklik 1080**.
+   - Bu yöntemde OBS'i ya da uygulamayı hangi sırayla açtığınızın önemi yoktur; sayfa uygulamaya kendiliğinden bağlanır, uygulama yeniden başlatılsa bile tekrar bağlanır.
+   - Alternatif: **Yerel dosya** işaretlenmeden **Bağlantı Adresi** olarak `http://127.0.0.1:8765` da yazılabilir. Ancak bu durumda OBS uygulamadan önce açılırsa sayfa yüklenemez; kaynağın özelliklerinden **"Geçerli sayfanın önbelleğini yenile"** gerekir.
+3. Kaynak listesinde **Tarayıcı** kaynağının **Video Yakalama Aygıtı**'nın **üstünde** olduğundan emin olun.
+4. Türkçe yazı koyu bir kutu içinde gösterilir; kutu oyunun İngilizce altyazısını örter. Görünümü adres ile ayarlayabilirsiniz (bunun için **Yerel dosya** yerine adres yöntemini kullanın): `http://127.0.0.1:8765/?size=52&bottom=18&bg=0.8`
    - `size`: yazı boyutu (piksel, varsayılan 46)
    - `bottom`: alttan uzaklık (ekran yüksekliğinin yüzdesi, varsayılan 14). Kutunun İngilizce altyazının üstüne gelmesi için ayarlayın.
    - `bg`: kutunun koyuluğu (0 = kutu yok, 1 = tamamen siyah, varsayılan 0.8)
@@ -277,12 +280,11 @@ OBS açık değil ya da sanal kamera başlatılmamış. OBS'in sağ altındaki *
 </details>
 
 <details>
-<summary><b>Çeviri OBS'te görünmüyor</b></summary>
+<summary><b>Uygulamada çeviri var ama OBS'te görünmüyor</b></summary>
 
-- Tarayıcı kaynağının URL'si `http://127.0.0.1:8765` mi? Uygulama penceresinin altında doğru adres yazar.
-- Tarayıcı kaynağı, kaynak listesinde oyun görüntüsünün **üstünde** mi?
-- Uygulama **Başlat**'a basılmış ve rozet **Hazır** mı?
-- Uygulama iki kez açıksa ikincisi bu adresi kullanamaz; birini kapatın.
+- Tarayıcı kaynağını **Yerel dosya → `altyazi_sayfasi.html`** olarak ekleyin. Adres (`http://127.0.0.1:8765`) kullanıyorsanız ve OBS uygulamadan önce açıldıysa sayfa yüklenememiştir: kaynağa sağ tık → **Özellikler** → **"Geçerli sayfanın önbelleğini yenile"**.
+- Tarayıcı kaynağı, kaynak listesinde oyun görüntüsünün **üstünde** mi, göz simgesi açık mı ve oyunun olduğu **sahnede** mi?
+- Uygulama penceresinin altında **⚠ Altyazı sayfası başlatılamadı** uyarısı var mı? Varsa uygulama iki kez açıktır ya da 8765 portunu başka bir program kullanıyordur. Fazla kopyayı kapatın ya da `ayarlar.json`'da `overlay_port` değerini değiştirin (ör. `8766`); dosya yönteminde bu durumda `altyazi_sayfasi.html?port=8766` adresini kullanın.
 </details>
 
 <details>
@@ -371,7 +373,8 @@ Kod büyük ölçüde platformdan bağımsızdır ama yalnızca Windows'ta test 
 ps5-altyazi-cevirici/
 ├── cevirici_gui.py        # Arayüz (PySide6): kontrol paneli ve alan seçiciler
 ├── motor.py               # Motor: görüntü alma, OCR, çeviri, gösterim
-├── overlay.py             # OBS Tarayıcı kaynağı için altyazı sayfası (anlık gösterim)
+├── overlay.py             # Altyazı sayfasına çeviriyi anında gönderen yerel sunucu
+├── altyazi_sayfasi.html   # OBS Tarayıcı kaynağına eklenen altyazı sayfası
 ├── test_altyazi.html      # Kurulumu denemek için test sayfası
 ├── ayarlar.example.json   # Örnek ayar dosyası
 ├── requirements.txt       # Python paketleri

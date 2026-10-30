@@ -3,65 +3,28 @@
 OBS'in Metin (GDI+) kaynagi dosyayi saniyede bir kontrol eder; kisa altyazilar o arada
 gelip gidebilir. Bu sunucu ceviriyi Server-Sent Events ile sayfaya aninda iter.
 Yalnizca standart kutuphane kullanir ve yalnizca 127.0.0.1'i dinler.
+Sayfanin kendisi altyazi_sayfasi.html dosyasidir; OBS'e dosya olarak da eklenebilir.
 """
 import json
 import queue
+import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
-PAGE = """<!doctype html>
-<html lang="tr">
-<head>
-<meta charset="utf-8">
-<title>Altyazı</title>
-<style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
-  #box { position: absolute; left: 6%; right: 6%; bottom: var(--bottom); text-align: center;
-         font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; color: #fff;
-         font-size: var(--size); line-height: 1.25; }
-  /* Koyu kutu, alttaki orijinal (Ingilizce) altyaziyi orter; ?bg=0 ile kapatilir. */
-  #box:not(:empty) { background: rgba(0, 0, 0, var(--bg)); border-radius: .35em;
-                     padding: .3em .6em; left: 50%; right: auto; transform: translateX(-50%);
-                     width: max-content; max-width: 88%; }
-  .line { display: block; paint-order: stroke fill; -webkit-text-stroke: var(--stroke) #000;
-          text-shadow: 0 2px 6px rgba(0,0,0,.8); animation: in .12s ease-out; }
-  .prev { font-size: .78em; opacity: .6; margin-bottom: .2em; }
-  @keyframes in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-</style>
-</head>
-<body>
-<div id="box"></div>
-<script>
-  // URL ayarlari: ?size=46&bottom=14&bg=0.8
-  //   size: yazi boyutu (piksel), bottom: alttan uzaklik (ekran yuksekliginin yuzdesi),
-  //   bg: arka plan kutusunun koyulugu (0 = kutu yok, 1 = tamamen siyah)
-  const q = new URLSearchParams(location.search);
-  const size = +(q.get('size') || 46);
-  const bg = q.has('bg') ? +q.get('bg') : 0.8;
-  document.documentElement.style.setProperty('--size', size + 'px');
-  document.documentElement.style.setProperty('--stroke', Math.max(bg > 0.5 ? 2 : 4, Math.round(size / (bg > 0.5 ? 14 : 7))) + 'px');
-  document.documentElement.style.setProperty('--bottom', (q.get('bottom') || 14) + 'vh');
-  document.documentElement.style.setProperty('--bg', bg);
-  const box = document.getElementById('box');
-  let shown = [];
-  function render(lines) {
-    if (JSON.stringify(lines) === JSON.stringify(shown)) return;
-    box.replaceChildren(...lines.map((text, i) => {
-      const el = document.createElement('span');
-      el.className = 'line' + (i < lines.length - 1 ? ' prev' : '');
-      el.textContent = text;
-      // Ayni satir guncelleniyorsa (harf harf beliren yazi) gecis animasyonu tekrarlanmasin.
-      if (shown.includes(text) || (i === lines.length - 1 && shown.length && text.startsWith(shown[shown.length - 1].slice(0, 8)))) el.style.animation = 'none';
-      return el;
-    }));
-    shown = lines;
-  }
-  const events = new EventSource('/events');
-  events.onmessage = e => render(JSON.parse(e.data).lines || []);
-</script>
-</body>
-</html>
-"""
+PAGE_FILE = Path(__file__).resolve().parent / 'altyazi_sayfasi.html'
+
+
+class ExclusiveServer(ThreadingHTTPServer):
+    # Windows'ta SO_REUSEADDR iki programin ayni portu sessizce paylasmasina izin verir;
+    # o zaman OBS yanlis programa baglanabilir. Port dolu ise acikca hata verilsin.
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self):
+        if hasattr(socket, 'SO_EXCLUSIVEADDRUSE'):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 class OverlayServer:
@@ -80,7 +43,7 @@ class OverlayServer:
                 if self.path.startswith('/events'):
                     server.stream(self)
                 elif self.path == '/' or self.path.startswith('/?'):
-                    body = PAGE.encode('utf-8')
+                    body = PAGE_FILE.read_bytes()
                     self.send_response(200)
                     self.send_header('Content-Type', 'text/html; charset=utf-8')
                     self.send_header('Content-Length', str(len(body)))
@@ -89,8 +52,7 @@ class OverlayServer:
                 else:
                     self.send_error(404)
 
-        self.httpd = ThreadingHTTPServer(('127.0.0.1', port), Handler)
-        self.httpd.daemon_threads = True
+        self.httpd = ExclusiveServer(('127.0.0.1', port), Handler)
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
     @property
@@ -101,6 +63,8 @@ class OverlayServer:
         handler.send_response(200)
         handler.send_header('Content-Type', 'text/event-stream; charset=utf-8')
         handler.send_header('Cache-Control', 'no-cache')
+        # Sayfa OBS'e yerel dosya olarak eklendiginde (file://) baglanabilsin.
+        handler.send_header('Access-Control-Allow-Origin', '*')
         handler.end_headers()
         inbox = queue.Queue()
         with self.lock:

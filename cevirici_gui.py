@@ -391,10 +391,10 @@ class MainWindow(QWidget):
             block.addWidget(label)
             layout.addLayout(block)
         layout.addWidget(QFrame(objectName='divider'))
-        overlay = QLabel(f"OBS: Tarayıcı kaynağı → http://127.0.0.1:{self.config['overlay_port']}",
-                         objectName='small')
-        overlay.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(overlay)
+        self.overlay_label = QLabel(objectName='small', wordWrap=True)
+        self.overlay_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.overlay_label)
+        self.show_overlay_hint()
 
         self.status_text = ''
         self.show_region()
@@ -416,6 +416,16 @@ class MainWindow(QWidget):
         self.start_button.style().polish(self.start_button)
         self.select_button.setEnabled(not self.engine.busy())
         self.source.setEnabled(not self.engine.busy())
+
+    def show_overlay_hint(self):
+        error = self.engine.overlay_error
+        if error:
+            self.overlay_label.setText(f'⚠ {error}')
+            self.overlay_label.setStyleSheet('color: #ff7a8a;')
+        else:
+            self.overlay_label.setText('OBS: Tarayıcı kaynağı → Yerel dosya: altyazi_sayfasi.html  '
+                                       f"(ya da http://127.0.0.1:{self.config['overlay_port']})")
+            self.overlay_label.setStyleSheet('')
 
     def show_region(self):
         region = motor.active_region(self.config)
@@ -504,6 +514,7 @@ class MainWindow(QWidget):
         if error:
             QMessageBox.warning(self, 'Başlatılamadı', error)
             return
+        self.show_overlay_hint()
         self.ocr_ms = self.tr_ms = self.total_ms = None
         self.english.setText('—')
         self.turkish.setText('—')
