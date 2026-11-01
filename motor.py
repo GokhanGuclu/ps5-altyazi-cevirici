@@ -612,7 +612,10 @@ class Engine:
                 self.publish()  # "onceki altyaziyi goster" degistiyse ekrandaki satirlar hemen guncellensin
 
     def show_test(self, lines):
-        """Gorunumu denemek icin altyaziya ornek satir yazar (ceviri calisiyorsa sonraki altyazi ezer)."""
+        """Gorunumu denemek icin altyaziya ornek satir yazar (ceviri calisiyorsa sonraki altyazi ezer).
+        Gercek cevirilerle ayni kurala uyar: onceki altyazi kapaliysa yalnizca son satir gosterilir."""
+        if not self.config['style'].get('show_previous', True):
+            lines = lines[-1:]
         if self.overlay:
             self.overlay.publish(lines)
 
