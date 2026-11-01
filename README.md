@@ -114,6 +114,11 @@ python -m pip install -r requirements.txt
 
 Bu adım birkaç dakika sürebilir.
 
+> 💡 **Birebir test edilmiş sürümler:** Python 3.13 ile, geliştiricinin bilgisayarında çalıştığı doğrulanmış sürümlerin aynısını (ekran kartı destekli PyTorch dahil) kurmak için `requirements.txt` yerine şunu kullanabilirsiniz. Bu durumda 5. adıma gerek kalmaz:
+> ```bash
+> python -m pip install -r requirements-lock.txt
+> ```
+
 ### 5. Ekran kartı desteğini açın (NVIDIA kullanıyorsanız)
 
 `pip`'in kurduğu PyTorch çoğu zaman yalnızca işlemcide (CPU) çalışan sürümdür. Ekran kartınızı kullanmak için CUDA destekli sürümü kurun:
@@ -378,6 +383,7 @@ ps5-altyazi-cevirici/
 ├── test_altyazi.html      # Kurulumu denemek için test sayfası
 ├── ayarlar.example.json   # Örnek ayar dosyası
 ├── requirements.txt       # Python paketleri
+├── requirements-lock.txt  # Birebir test edilmiş sürümler (Python 3.13, CUDA 12.4)
 ├── docs/                  # README görselleri
 └── LICENSE
 ```

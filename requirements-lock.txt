@@ -1,0 +1,19 @@
+# Birebir calistigi dogrulanmis surumler.
+# Windows 11, Python 3.13.1, NVIDIA GeForce RTX 3060 Laptop (surucu 610.62), CUDA 12.4.
+# Kurulum:  python -m pip install -r requirements-lock.txt
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+transformers==4.46.3
+huggingface-hub==0.36.2
+tokenizers==0.20.3
+safetensors==0.7.0
+sentencepiece==0.2.2
+protobuf==6.33.6
+sacremoses==0.2.0
+PySide6==6.12.0
+opencv-python==5.0.0.93
+numpy==2.3.3
+mss==10.2.0
+pygrabber==0.2
+comtypes==1.4.17
+pytesseract==0.3.13

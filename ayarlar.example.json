@@ -8,5 +8,14 @@
   "text_mode": "light",
   "min_contrast": 25,
   "min_confidence": 45,
-  "overlay_port": 8765
+  "overlay_port": 8765,
+  "style": {
+    "size": 46,
+    "bottom": 14,
+    "bg": 0.8,
+    "color": "#ffffff",
+    "name_color": "#f2c94c",
+    "outline": true,
+    "show_previous": false
+  }
 }
