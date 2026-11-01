@@ -578,7 +578,54 @@ def tidy_translation(source, translated):
         translated = re.sub(r'^\s*-\s*', '', translated)
     parts = sentences(translated)
     keep = max(1, len(sentences(source)))
-    return ' '.join(parts[:keep]) if len(parts) > keep else translated
+    if len(parts) > keep:
+        translated = ' '.join(parts[:keep])
+    # Kisa cevaplari ikiler: "No." -> "Hayir, hayir.", "Alright." -> "Tamam, tamam." Ingilizcede
+    # tekrar yoksa ("No, no." degilse) Turkcedeki yan yana ayni kelime teke indirilir.
+    source_words = re.findall(r"[a-z']+", source.lower())
+    if len(source_words) == len(set(source_words)):
+        translated = re.sub(r"\b(\w+)(?:[,!.]?\s+\1\b)+", r"\1", translated, flags=re.IGNORECASE)
+    return translated
+
+
+# Cok kisa unlemler: model bunlari ya ikiler ya da yanlis cevirir ("Huh?" -> "Evet.",
+# "Where?" -> "Ne?"). Tum replik bunlardan biriyse model hic calistirilmaz.
+SHORT_REPLIES = {
+    'no': 'Hayır', 'nope': 'Hayır', 'nah': 'Hayır', 'no no': 'Hayır, hayır',
+    'yes': 'Evet', 'yeah': 'Evet', 'yep': 'Evet', 'yup': 'Evet', 'aye': 'Evet',
+    'okay': 'Tamam', 'ok': 'Tamam', 'alright': 'Tamam', 'all right': 'Tamam', 'fine': 'Peki',
+    'sure': 'Tabii', 'right': 'Doğru', 'huh': 'Ha', 'what': 'Ne', 'where': 'Nerede',
+    'why': 'Neden', 'who': 'Kim', 'how': 'Nasıl', 'when': 'Ne zaman', 'hey': 'Hey', 'oh': 'Ah',
+    'hmm': 'Hmm', 'hm': 'Hmm', 'uh': 'Ee', 'um': 'Şey', 'wait': 'Bekle', 'come on': 'Hadi',
+    'listen': 'Dinle', 'look': 'Bak', 'go': 'Git', 'run': 'Kaç', 'stop': 'Dur', 'move': 'Kımılda',
+    'thanks': 'Sağ ol', 'thank you': 'Teşekkürler', 'sorry': 'Üzgünüm', 'please': 'Lütfen',
+    'hello': 'Merhaba', 'hi': 'Selam', 'bye': 'Hoşça kal', 'shit': 'Siktir', 'damn': 'Lanet olsun',
+    'damn it': 'Kahretsin', 'really': 'Gerçekten mi', 'me': 'Ben mi', 'good': 'İyi',
+    'of course': 'Tabii ki', 'maybe': 'Belki', 'easy': 'Sakin ol', 'careful': 'Dikkat',
+    'quiet': 'Sessiz ol', 'help': 'İmdat', 'got it': 'Anladım', 'i know': 'Biliyorum',
+    'me too': 'Ben de', 'let\'s go': 'Gidelim', 'never mind': 'Boş ver', 'thank god': 'Çok şükür',
+    'no way': 'Olamaz', 'oh no': 'Olamaz', 'oh my god': 'Aman Tanrım', 'oh god': 'Tanrım',
+    'jesus': 'Tanrım', 'jesus christ': 'Tanrım', 'holy shit': 'Hassiktir', 'what the hell': 'Ne oluyor',
+    'what the fuck': 'Ne oluyor be', 'goddamn it': 'Kahretsin', 'hold on': 'Bir saniye', 'get down': 'Eğil',
+    'shut up': 'Kapa çeneni', 'let\'s move': 'Gidelim', 'move it': 'Çabuk', 'hurry up': 'Acele et',
+    'look out': 'Dikkat et', 'watch out': 'Dikkat et', 'get back': 'Geri çekil', 'calm down': 'Sakin ol',
+    'not now': 'Şimdi olmaz', 'go on': 'Devam et', 'take cover': 'Siper alın', 'over here': 'Buraya',
+}
+
+
+def short_reply(text):
+    """Replik SHORT_REPLIES'tan biriyse Turkcesi (noktalama korunarak), degilse None."""
+    match = re.fullmatch(r"\s*([A-Za-z' ,]+?)\s*([.!?…]*)\s*", text)
+    if not match:
+        return None
+    key = ' '.join(re.sub(r'[^a-z\' ]', ' ', match.group(1).lower()).split())
+    turkish = SHORT_REPLIES.get(key)
+    if turkish is None:
+        return None
+    mark = match.group(2) or '.'
+    if mark.startswith('?') and turkish in ('Gerçekten mi', 'Ben mi'):
+        return turkish + '?'
+    return turkish + mark
 
 
 class Translator:
@@ -606,7 +653,7 @@ class Translator:
         return self._translate(text)
 
     def _translate(self, text):
-        return tidy_translation(text, self._generate(text))
+        return short_reply(text) or tidy_translation(text, self._generate(text))
 
     def _generate(self, text):
         with self.torch.inference_mode():
