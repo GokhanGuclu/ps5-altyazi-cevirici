@@ -23,5 +23,5 @@ SOFTWARE.
 ---
 
 Bu lisans yalnizca bu depodaki kaynak kodu kapsar. Uygulamanin kullandigi
-facebook/nllb-200-distilled-600M modeli CC-BY-NC-4.0 lisanslidir ve yalnizca
+facebook/nllb-200-distilled-1.3B modeli CC-BY-NC-4.0 lisanslidir ve yalnizca
 ticari olmayan kullanima izin verir. Model bu depoda dagitilmaz.

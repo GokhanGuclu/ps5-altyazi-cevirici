@@ -4,7 +4,7 @@
   "camera_region": null,
   "region": null,
   "tesseract": "C:\\Program Files\\Tesseract-OCR\\tesseract.exe",
-  "model": "C:\\AI-Models\\nllb-200",
+  "model": "C:\\AI-Models\\nllb-200-1.3B",
   "text_mode": "light",
   "min_contrast": 25,
   "min_confidence": 45,

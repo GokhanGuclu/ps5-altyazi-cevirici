@@ -28,14 +28,14 @@ from overlay import OverlayServer
 BASE = Path(__file__).resolve().parent
 OUTPUT = BASE / 'altyazi.txt'
 CONFIG = BASE / 'ayarlar.json'
-HF_MODEL = 'facebook/nllb-200-distilled-600M'
+HF_MODEL = 'facebook/nllb-200-distilled-1.3B'
 DEFAULTS = {
     'source': 'camera',               # camera: OBS Sanal Kamera, screen: ekran bolgesi
     'camera': 'OBS Virtual Camera',
     'camera_region': None,            # kamera karesi icindeki altyazi alani
     'region': None,                   # ekrandaki altyazi alani
     'tesseract': r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-    'model': r'C:\AI-Models\nllb-200',
+    'model': r'C:\AI-Models\nllb-200-1.3B',
     'text_mode': 'light',  # light: acik renk yazi, dark: koyu renk yazi, none: esikleme yok
     'min_contrast': 25,    # yazinin cevresinden en az bu kadar parlak (koyu) olmasi gerekir
     'min_confidence': 45,  # Tesseract'in bu puanin altinda okudugu kelimeler atilir
@@ -590,7 +590,10 @@ class Translator:
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, src_lang='eng_Latn',
                                                        local_files_only=local)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path, local_files_only=local)
+        # Ekran kartinda yarim hassasiyet (fp16): olcumde ceviriler fp32 ile birebir ayni cikti,
+        # bellek yariya indi ve yukleme hizlandi. 1.3B model fp16 ile 2,6 GB yer kaplar.
+        dtype = torch.float16 if self.device == 'cuda' else torch.float32
+        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_path, local_files_only=local, torch_dtype=dtype)
         self.model = self.model.to(self.device).eval()
         self.target_id = self.tokenizer.convert_tokens_to_ids('tur_Latn')
         self._translate('Hello.')  # ilk cagri (CUDA isinmasi) birkac saniye surer; ilk altyazi beklemesin

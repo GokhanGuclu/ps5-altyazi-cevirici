@@ -42,12 +42,12 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 2. **Değişim kontrolü:** Saniyede yaklaşık 20 kez altyazı bölgesine bakılır. Yazı değişmediyse hiçbir şey yapılmaz; arkadaki oyun sahnesinin hareket etmesi bu kontrolü tetiklemez, yalnızca yazının kendisi takip edilir.
 3. **Metin tanıma (OCR):** Yazı değiştiyse yazı arka plandan **yerel kontrastla** ayrılır (çevresinden parlak ince çizgiler yazıdır; gömlek, gökyüzü gibi geniş parlak alanlar değildir), satıra dizilmeyen lekeler atılır, yazı kırpılıp Tesseract'ın en iyi okuduğu harf boyutuna ölçeklenir ve [Tesseract](https://github.com/tesseract-ocr/tesseract) ile okunur. Emin olunmayan kelimeler ve kelimeye benzemeyen okumalar elenir; böylece altyazı yokken arka plandaki nesneler "altyazı" sanılmaz.
 4. **Konuşmacı adı:** Birçok oyun konuşanın adını farklı renkte yazar (Red Dead Redemption 2'de soluk gri "Dutch", Call of Duty'de mavi "Daniels:"). Uygulama satır başında rengi farklı olan kelimeleri ad olarak ayırır, ayrıca okur ve **çevirmeden** "Dutch: ..." biçiminde gösterir. Ad, altyazıda farklı renkte görünür.
-5. **Çeviri:** Metin, Meta'nın [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) modeliyle hemen Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir. Harf harf beliren altyazılarda çeviri, yazı uzadıkça güncellenir.
+5. **Çeviri:** Metin, Meta'nın [NLLB-200 (1.3B)](https://huggingface.co/facebook/nllb-200-distilled-1.3B) modeliyle hemen Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir. Harf harf beliren altyazılarda çeviri, yazı uzadıkça güncellenir.
 6. **Gösterim:** Çeviri, OBS'teki **Tarayıcı kaynağına anında** gönderilir. Her çeviri en az 1,5 saniye ekranda kalır; hızlı geçen bir altyazının ardından yenisi gelirse önceki çeviri onun üstünde soluk olarak bir süre daha görünür. Altyazı oyundan kaybolunca çeviri de silinir.
 
 **Doğruluk:** 18 farklı oyunun (Zelda, Yakuza, Call of Duty, Assassin's Creed, Destiny 2, Hellblade, Xenoblade, WWE…) altyazılı ekran görüntülerinde kelime doğruluğu ortalama **%95**; 18 oyunun 15'inde %90'ın üzerinde. Altyazı içermeyen 37 sahne bölgesinin hiçbirinde yanlışlıkla "altyazı" okunmadı.
 
-**Hız:** Bir NVIDIA ekran kartında, altyazının oyunda belirmesinden çevirinin ekranda görünmesine kadar geçen süre genellikle **0,35 – 0,65 saniyedir**. Ekranda yarım saniye kalan "Run!" gibi kısa altyazılar da yakalanır. Uygulama penceresindeki **Gecikme** değeri bu süreyi canlı gösterir.
+**Hız:** Bir NVIDIA ekran kartında, altyazının oyunda belirmesinden çevirinin ekranda görünmesine kadar geçen süre genellikle **0,5 – 1 saniyedir**. Ekranda yarım saniye kalan "Run!" gibi kısa altyazılar da yakalanır. Uygulama penceresindeki **Gecikme** değeri bu süreyi canlı gösterir.
 
 ---
 
@@ -61,7 +61,7 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 | **OBS Studio** (28 veya üzeri) | Oyun görüntüsünü almak ve çeviriyi göstermek için. |
 | **HDMI yakalama kartı** | PS5 görüntüsünü bilgisayara almak için. Bkz. [PS5'i bağlama](#-ps5i-bağlama-hdmi-yakalama-kartı). |
 | **NVIDIA ekran kartı** *(önerilir)* | Ekran kartı olmadan da çalışır ama çeviri birkaç kat yavaşlar. |
-| **~3 GB boş disk alanı** | Çeviri modeli yaklaşık 2,5 GB yer kaplar. |
+| **~7 GB boş disk alanı** | Çeviri modeli yaklaşık 5,5 GB yer kaplar. |
 
 ---
 
@@ -140,9 +140,11 @@ python -c "import torch; print(torch.cuda.is_available())"
 Modeli bir kez indirip bilgisayarınızda saklamak en hızlı ve sorunsuz yoldur:
 
 ```bash
-hf download facebook/nllb-200-distilled-600M --local-dir "C:\AI-Models\nllb-200"
+hf download facebook/nllb-200-distilled-1.3B --local-dir "C:\AI-Models\nllb-200-1.3B"
 ```
 
+> **Neden 1.3B?** Oyun replikleri ve deyimler üzerinde yapılan karşılaştırmada daha küçük 600M modele göre 22 cümlenin 10'unda belirgin şekilde daha iyi çevirdi ("We're not out of the woods yet" → *Henüz tehlikeden kurtulmadık*), ortalama 0,2 sn daha yavaş. Ekran kartında yarım hassasiyette (fp16) yaklaşık 2,6 GB bellek kullanır. Daha zayıf bir ekran kartında 600M modeli de kullanabilirsiniz: `hf download facebook/nllb-200-distilled-600M --local-dir "C:\AI-Models\nllb-200"` ve `ayarlar.json`'da `model` alanını bu klasöre çevirin.
+>
 > Bu adımı atlarsanız model, uygulama ilk açıldığında otomatik olarak indirilir. Modeli başka bir klasöre indirdiyseniz yolunu [ayarlar](#️-ayarlar) dosyasındaki `model` alanına yazın.
 
 ### 7. Uygulamayı başlatın
@@ -224,7 +226,7 @@ Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı
    - Yüksekliği iki satır yazıyı alacak kadar tutun.
    - Vazgeçmek için **ESC**'ye ya da **sağ tık**'a basın.
    - OBS logosu görüyorsanız sanal kamera başlatılmamıştır.
-5. **▶ Başlat**'a basın. İlk açılışta model yaklaşık 20 saniyede yüklenir; rozet **"CUDA · Hazır"** olunca pencere kendiliğinden küçülür.
+5. **▶ Başlat**'a basın. İlk açılışta model yaklaşık 25 saniyede yüklenir; rozet **"CUDA · Hazır"** olunca pencere kendiliğinden küçülür.
 6. Altyazının görünümünü **Görünüm** düğmesinden ayarlayın (yazı boyutu, alttan konum, arka plan koyuluğu, yazı ve ad rengi, kenar çizgisi, önceki altyazının üstte gösterilip gösterilmeyeceği).
 7. Oynayın! İşiniz bitince pencereyi açıp **■ Durdur**'a basın ya da kapatın.
 
@@ -258,7 +260,7 @@ Uygulama ayarlarını proje klasöründeki `ayarlar.json` dosyasında tutar. Bu 
 | `camera` | `OBS Virtual Camera` | Okunacak kameranın adı. Yakalama kartını doğrudan okumak için kartın adını yazabilirsiniz (OBS kartı kullanmıyorsa). |
 | `camera_region` / `region` | — | Seçilen altyazı alanı. **Alan Seç** ile otomatik yazılır. |
 | `tesseract` | `C:\Program Files\Tesseract-OCR\tesseract.exe` | Tesseract'ın yolu. Bulunamazsa sistem `PATH`'inde aranır. |
-| `model` | `C:\AI-Models\nllb-200` | Çeviri modelinin klasörü. Klasör yoksa model HuggingFace'ten indirilir. |
+| `model` | `C:\AI-Models\nllb-200-1.3B` | Çeviri modelinin klasörü. Klasör yoksa model HuggingFace'ten indirilir. |
 | `text_mode` | `light` | Altyazının rengi: `light` (arka plandan açık yazı — çoğu oyun, gri yazılar dahil), `dark` (koyu yazı), `none` (görüntü temizleme kapalı). |
 | `min_contrast` | `25` | Yazının çevresinden en az ne kadar parlak olması gerektiği (0–255). |
 | `min_confidence` | `45` | Tesseract'ın bu puanın altında okuduğu kelimeler atılır (0–100). |
@@ -405,7 +407,7 @@ Hata bildirimleri, öneriler ve katkılar memnuniyetle karşılanır! Bir sorunl
 ## 📄 Lisans
 
 - **Kaynak kod:** [MIT Lisansı](LICENSE). Kodu dilediğiniz gibi kullanabilir, değiştirebilir ve paylaşabilirsiniz.
-- **Çeviri modeli:** [facebook/nllb-200-distilled-600M](https://huggingface.co/facebook/nllb-200-distilled-600M), Meta tarafından **CC-BY-NC-4.0** lisansıyla yayımlanmıştır. Yalnızca **ticari olmayan** kullanıma izin verir. Model bu depoda dağıtılmaz; kurulum sırasında doğrudan HuggingFace'ten indirilir.
+- **Çeviri modeli:** [facebook/nllb-200-distilled-1.3B](https://huggingface.co/facebook/nllb-200-distilled-1.3B), Meta tarafından **CC-BY-NC-4.0** lisansıyla yayımlanmıştır. Yalnızca **ticari olmayan** kullanıma izin verir. Model bu depoda dağıtılmaz; kurulum sırasında doğrudan HuggingFace'ten indirilir.
 - **Tesseract OCR:** Apache 2.0 lisanslıdır.
 
 ---
