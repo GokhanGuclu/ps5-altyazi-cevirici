@@ -32,7 +32,9 @@ class OverlayServer:
         self.port = port
         self.clients = set()
         self.lock = threading.Lock()
-        self.last = json.dumps({'lines': []})
+        self.lines = []
+        self.style = {}
+        self.last = self.message()
         server = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -84,9 +86,20 @@ class OverlayServer:
             with self.lock:
                 self.clients.discard(inbox)
 
-    def publish(self, lines):
-        data = json.dumps({'lines': lines}, ensure_ascii=False)
+    def message(self):
+        return json.dumps({'lines': self.lines, 'style': self.style}, ensure_ascii=False)
+
+    def broadcast(self):
         with self.lock:
-            self.last = data
+            self.last = self.message()
             for inbox in self.clients:
-                inbox.put(data)
+                inbox.put(self.last)
+
+    def publish(self, lines):
+        self.lines = list(lines)
+        self.broadcast()
+
+    def set_style(self, style):
+        """Gorunum ayarlari (boyut, konum, renk...) sayfaya aninda uygulanir."""
+        self.style = dict(style)
+        self.broadcast()

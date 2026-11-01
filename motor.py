@@ -40,6 +40,15 @@ DEFAULTS = {
     'min_contrast': 25,    # yazinin cevresinden en az bu kadar parlak (koyu) olmasi gerekir
     'min_confidence': 45,  # Tesseract'in bu puanin altinda okudugu kelimeler atilir
     'overlay_port': 8765,  # OBS Tarayici kaynagi: http://127.0.0.1:8765
+    'style': None,         # altyazi gorunumu; eksik anahtarlar STYLE_DEFAULTS'tan gelir
+}
+STYLE_DEFAULTS = {
+    'size': 46,            # yazi boyutu (px, 1080p ekranda)
+    'bottom': 14,          # alttan uzaklik (ekran yuksekliginin %'si)
+    'bg': 0.8,             # arka plan kutusunun koyulugu (0 = yok, 1 = tam siyah)
+    'color': '#ffffff',    # yazi rengi
+    'name_color': '#f2c94c',  # konusmaci adinin rengi
+    'outline': True,       # yazinin etrafinda siyah kenar
 }
 POLL = 0.05          # goruntu kontrol araligi (sn)
 CHANGE_GRID = (160, 40)  # degisim kontrolu icin kucultulmus yazi maskesi
@@ -51,6 +60,7 @@ SIMILAR = 0.9        # bu oranin ustundeki iki okuma ayni metin sayilir
 CACHE_SIZE = 500
 TEXT_KERNEL = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))  # harf kalinligindan genis
 OCR_LETTER_HEIGHT = 16   # OCR'den once harfler bu yukseklige olceklenir (px)
+SPEAKER_COLOR_DIFF = 22  # konusmaci adi, konusmadan en az bu kadar farkli renkte (Lab) olmali
 CAMERA_SIZE = (1920, 1080)
 WORD = re.compile(r"[\"'“‘(\[*-]*[A-Za-z0-9][A-Za-z0-9'’.-]*[.,!?:;…)\]\"'”’*]*")
 SPEAKER = re.compile(r"^((?:[A-Z][\w'.-]*\s?){1,3}):\s*(.+)$")
@@ -168,6 +178,7 @@ def load_config():
         if 'left' in data:  # eski surum: dosyada yalnizca alan vardi
             data = {'region': data}
         config.update({k: v for k, v in data.items() if k in DEFAULTS})
+    config['style'] = {**STYLE_DEFAULTS, **(config['style'] or {})}
     return config
 
 
@@ -257,7 +268,114 @@ def clean_text(raw):
     text = re.sub(r'(\w)-\s*\n\s*(\w)', r'\1\2', raw)  # satir sonu tirelemesi
     text = ' '.join(text.split())
     text = re.sub(r'(?<![^\s.,!?;:])\|(?=\s|$)', 'I', text)  # tek basina "|" aslinda "I" zamiridir
-    return text.strip(' |_~')  # Tesseract'in kenarlarda urettigi cop karakterler
+    return strip_junk(text.strip(' |_~'))  # Tesseract'in kenarlarda urettigi cop karakterler
+
+
+def strip_junk(text):
+    """Satirin basinda ve sonunda kalan, kelime olmayan parcalari atar:
+    "...long gone. @in", "Come on, Arthur. =\"", "son! a" gibi."""
+    tokens = text.split()
+
+    def junk(token, neighbour_ends_sentence):
+        if not WORD.fullmatch(token):
+            return True
+        # Cumle bittikten sonra gelen tek harf ("son! a") cumleye ait degildir.
+        return (neighbour_ends_sentence and sum(c.isalnum() for c in token) == 1
+                and token.strip('.,!?') not in ('I', 'a', 'A'))
+
+    while tokens and junk(tokens[-1], len(tokens) > 1 and tokens[-2][-1] in '.!?…'):
+        tokens.pop()
+    while tokens and not WORD.fullmatch(tokens[0]):
+        tokens.pop(0)
+    return ' '.join(tokens)
+
+
+def split_speaker(mask, color):
+    """Konusmaci adini renk farkiyla ayirir: (konusma maskesi, ad kutusu (x1, y1, x2, y2) ya da None).
+
+    Bircok oyun adi konusmadan farkli renkte yazar (RDR2'de soluk gri "Dutch", Call of
+    Duty'de mavi "Daniels:"). Iki nokta olmadigi icin metinden ayirmak mumkun degildir ama
+    renkten mumkundur: ilk satirin basinda, rengi satirin geri kalanindan belirgin bicimde
+    farkli olan kelimeler ad sayilir."""
+    ink = (mask < 128).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    parts = [i for i in range(1, n) if stats[i][4] >= 4]
+    if len(parts) < 4:
+        return mask, None
+    height = float(np.median([stats[i][3] for i in parts if stats[i][3] >= 4]))
+    center = lambda i: stats[i][1] + stats[i][3] / 2
+    # Harf boyutundaki parcalari satirlara ayir; ilk gercek satir (en az 3 harf) secilir.
+    # Ince yazilmis adlar parcalara bolunur; kirintilar kelime gruplamasini bozmasin diye disarida kalir.
+    letters = sorted((i for i in parts if stats[i][3] >= 0.5 * height), key=center)
+    rows, current = [], []
+    for i in letters:
+        if current and center(i) - center(current[-1]) > 0.7 * height:
+            rows.append(current)
+            current = []
+        current.append(i)
+    rows.append(current)
+    line = next((r for r in rows if len(r) >= 3), None)
+    if not line:
+        return mask, None
+    line.sort(key=lambda i: stats[i][0])
+    words, current, right = [], [], None
+    for i in line:
+        if current and stats[i][0] - right > 0.45 * height:
+            words.append(current)
+            current = []
+        current.append(i)
+        right = max(right or 0, stats[i][0] + stats[i][2])
+    words.append(current)
+    if len(words) < 2:
+        return mask, None
+    lab = cv2.cvtColor(color, cv2.COLOR_BGR2LAB).astype(np.float32)
+    colors = [np.median(lab[np.isin(labels, w)], axis=0) for w in words]
+    reference = np.median(colors[min(2, len(words) - 1):], axis=0)
+    distance = [float(np.linalg.norm(c - reference)) for c in colors]
+    speaker = 0
+    while speaker < min(2, len(words) - 1) and distance[speaker] > SPEAKER_COLOR_DIFF:
+        speaker += 1
+    # Addan sonraki kelime konusmanin renginde olmali; aksi halde renk farki rastlantisaldir.
+    if not speaker or distance[speaker] > max(SPEAKER_COLOR_DIFF, 0.6 * distance[speaker - 1]):
+        return mask, None
+    name = [i for w in words[:speaker] for i in w]
+    x1 = min(stats[i][0] for i in name)
+    x2 = max(stats[i][0] + stats[i][2] for i in name)
+    y1 = int(min(stats[i][1] for i in line) - 0.3 * height)
+    y2 = int(max(stats[i][1] + stats[i][3] for i in line) + 0.3 * height)
+    pad = int(0.2 * height)
+    box = (max(0, x1 - pad), max(0, y1), x2 + pad, y2)
+    dialogue = mask.copy()
+    dialogue[box[1]:box[3], box[0]:box[2]] = 255  # adin kirintilari dahil tum murekkebi sil
+    return dialogue, box
+
+
+def read_subtitle(mask, color, min_confidence):
+    """Altyaziyi okur; renkle ayrilan konusmaci adi varsa "Ad: konusma" bicimine getirir.
+    Ad ayri okunur ve ceviriye girmez (Translator "Ad:" oncesini cevirmez)."""
+    dialogue, box = split_speaker(mask, color) if color is not None else (mask, None)
+    text = read_text(dialogue, min_confidence)
+    if text and box is not None:
+        name = read_name(cv2.cvtColor(color, cv2.COLOR_BGR2GRAY), box)
+        if name:
+            return f'{name}: {text}'
+    return text
+
+
+def read_name(gray, box):
+    """Konusmaci adini dogrudan gri goruntuden okur. Ad cogu zaman soluk ve ince yazildigi
+    icin genel yazi maskesinde kopuk cikar; kendi kutusunda ayri esiklenip buyutulunce
+    cok daha iyi okunur. Ad gibi gorunmuyorsa None."""
+    x1, y1, x2, y2 = box
+    crop = gray[y1:y2, x1:x2]
+    if crop.size == 0:
+        return None
+    factor = 3 * OCR_LETTER_HEIGHT / max(1, crop.shape[0])
+    crop = cv2.resize(crop, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+    image = cv2.threshold(crop, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    image = cv2.copyMakeBorder(image, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
+    name = ocr_words(image, 30, 7).rstrip(':.;,')
+    return name if re.fullmatch(r"[A-Z][A-Za-z'.-]+(?: [A-Z][A-Za-z'.-]+)?", name) else None
 
 
 def crop_to_ink(image, pad=12):
@@ -372,10 +490,21 @@ def similar(a, b):
     return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() >= SIMILAR
 
 
+def without_speaker(text):
+    match = SPEAKER.match(text)
+    return match.group(2) if match else text
+
+
 def subtitle_change(current, committed):
-    """'new' (yeni altyazi), 'grow' (harf harf beliren yazi buyudu) ya da None (ayni altyazi)."""
+    """'new' (yeni altyazi), 'grow' (harf harf beliren yazi buyudu) ya da None (ayni altyazi).
+    Konusmaci adi karsilastirmaya girmez: ad bir karede okunup digerinde okunamazsa ayni
+    konusma yeniden cevrilmesin."""
     if not committed:
         return 'new'
+    named = SPEAKER.match(current) and not SPEAKER.match(committed)
+    current, committed = without_speaker(current), without_speaker(committed)
+    if named and similar(current, committed):
+        return 'grow'  # ayni konusma, ad bu karede okunabildi: ad eklenerek guncellenir
     if len(current) > len(committed) + 2 and similar(committed, current[:len(committed)]):
         return 'grow'
     # Ayni altyazinin gurultulu okumasi ya da eksik okunmus parcasi: atla.
@@ -453,9 +582,49 @@ class Engine:
         self.lines = []  # ekrandaki ceviriler: [metin, gosterilme zamani]
         self.overlay = None
         self.overlay_error = None
+        self.names = {}  # okunan konusmaci adlari ve kac kez goruldukleri
 
     def ui(self, **values):
         self.on_update(values)
+
+    def ensure_overlay(self):
+        """Altyazi sayfasinin sunucusunu baslatir (uygulama acilinca; Baslat beklenmez, boylece
+        gorunum ayarlari ve test yazisi oyun baslamadan denenebilir). Basarisizsa overlay_error dolar."""
+        if self.overlay is not None:
+            return
+        port = int(self.config['overlay_port'])
+        try:
+            self.overlay = OverlayServer(port)
+            self.overlay_error = None
+            self.overlay.set_style(self.config['style'])
+        except OSError:  # port dolu (ornegin uygulama iki kez acik): yalnizca altyazi.txt kullanilir
+            self.overlay = None
+            self.overlay_error = (f'Altyazı sayfası başlatılamadı: {port} portunu başka bir program '
+                                  "kullanıyor (uygulama iki kez açık olabilir). OBS'te altyazı görünmez.")
+
+    def set_style(self, style):
+        self.config['style'] = dict(style)
+        if self.overlay:
+            self.overlay.set_style(style)
+
+    def show_test(self, lines):
+        """Gorunumu denemek icin altyaziya ornek satir yazar (ceviri calisiyorsa sonraki altyazi ezer)."""
+        if self.overlay:
+            self.overlay.publish(lines)
+
+    def stable_speaker(self, text):
+        """Soluk yazilan adlar her karede biraz farkli okunur ("Dutcl", "Dutct"). Her okuma
+        kendi sayacina eklenir; ekranda, benzer okumalar arasinda en sik gorulen gosterilir.
+        Boylece dogru okuma ("Dutch") kisa surede one gecer ve ad ekranda sabit kalir."""
+        match = SPEAKER.match(text)
+        if not match:
+            return text
+        name = match.group(1).strip()
+        self.names[name] = self.names.get(name, 0) + 1
+        alike = [k for k in self.names
+                 if difflib.SequenceMatcher(None, k.lower(), name.lower()).ratio() >= 0.6]
+        best = max(alike, key=lambda k: self.names[k])
+        return f'{best}: {match.group(2)}'
 
     def busy(self):
         return any(t.is_alive() for t in self.threads)
@@ -481,15 +650,7 @@ class Engine:
             return (f"Tesseract bulunamadı: {self.config['tesseract']}\n"
                     "Yolu ayarlar.json içindeki 'tesseract' alanına yazın.")
         pytesseract.pytesseract.tesseract_cmd = tesseract
-        if self.overlay is None:
-            port = int(self.config['overlay_port'])
-            try:
-                self.overlay = OverlayServer(port)
-                self.overlay_error = None
-            except OSError:  # port dolu (ornegin uygulama iki kez acik): yalnizca altyazi.txt kullanilir
-                self.overlay = None
-                self.overlay_error = (f'Altyazı sayfası başlatılamadı: {port} portunu başka bir program '
-                                      "kullanıyor (uygulama iki kez açık olabilir). OBS'te altyazı görünmez.")
+        self.ensure_overlay()
         with self.gen_lock:
             self.lines = []
             self.publish()
@@ -597,10 +758,11 @@ class Engine:
             else:
                 sct = screen_capture()
             while not stop.is_set():
-                gray = self.grab(reader, sct, region)
-                if gray is None:
+                color = self.grab(reader, sct, region)
+                if color is None:
                     stop.wait(POLL)
                     continue
+                gray = cv2.cvtColor(color, cv2.COLOR_BGR2GRAY)
                 # Degisim yazi maskesi uzerinden olculur; arkadaki hareketli sahne OCR'yi tetiklemez.
                 # Ortalama fark yerine degisen piksel sayisina bakilir: "No." yerine "Go!" gelmesi
                 # gibi kucuk degisiklikler de yakalanir.
@@ -611,7 +773,7 @@ class Engine:
                 if changed:
                     previous_small = small
                     detected = time.perf_counter()
-                    current = read_text(mask, min_confidence)
+                    current = self.stable_speaker(read_subtitle(mask, color, min_confidence))
                     self.ui(ocr_ms=int((time.perf_counter() - detected) * 1000))
                     visible = looks_like_text(current)
                     if not visible and np.mean(small < 128) > 0.005:
@@ -648,12 +810,13 @@ class Engine:
 
     @staticmethod
     def grab(reader, sct, region):
+        """Altyazi bolgesinin renkli (BGR) goruntusu; renk, konusmaci adini ayirmak icin gerekir."""
         if reader is None:
-            return cv2.cvtColor(np.asarray(sct.grab(region)), cv2.COLOR_BGRA2GRAY)
+            return cv2.cvtColor(np.asarray(sct.grab(region)), cv2.COLOR_BGRA2BGR)
         frame = reader.latest()
         if frame is None:
             return None
         h, w = frame.shape[:2]
         x, y = max(0, region['left']), max(0, region['top'])
         crop = frame[y:min(h, y + region['height']), x:min(w, x + region['width'])]
-        return cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.size else None
+        return crop if crop.size else None

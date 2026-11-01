@@ -41,8 +41,9 @@ Türkçe dil desteği olmayan bir oyunu oynarken altyazıları anlamakta zorlan�
 1. **Görüntü:** Uygulama oyun görüntüsünü **OBS Sanal Kamera** üzerinden tam 1080p olarak alır. Ekrandaki pencereler araya giremez. İsterseniz ekranın bir bölgesini okuyan "Ekran" kaynağını da seçebilirsiniz.
 2. **Değişim kontrolü:** Saniyede yaklaşık 20 kez altyazı bölgesine bakılır. Yazı değişmediyse hiçbir şey yapılmaz; arkadaki oyun sahnesinin hareket etmesi bu kontrolü tetiklemez, yalnızca yazının kendisi takip edilir.
 3. **Metin tanıma (OCR):** Yazı değiştiyse yazı arka plandan **yerel kontrastla** ayrılır (çevresinden parlak ince çizgiler yazıdır; gömlek, gökyüzü gibi geniş parlak alanlar değildir), satıra dizilmeyen lekeler atılır, yazı kırpılıp Tesseract'ın en iyi okuduğu harf boyutuna ölçeklenir ve [Tesseract](https://github.com/tesseract-ocr/tesseract) ile okunur. Emin olunmayan kelimeler ve kelimeye benzemeyen okumalar elenir; böylece altyazı yokken arka plandaki nesneler "altyazı" sanılmaz.
-4. **Çeviri:** Metin, Meta'nın [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) modeliyle hemen Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir. Harf harf beliren altyazılarda çeviri, yazı uzadıkça güncellenir.
-5. **Gösterim:** Çeviri, OBS'teki **Tarayıcı kaynağına anında** gönderilir. Her çeviri en az 1,5 saniye ekranda kalır; hızlı geçen bir altyazının ardından yenisi gelirse önceki çeviri onun üstünde soluk olarak bir süre daha görünür. Altyazı oyundan kaybolunca çeviri de silinir.
+4. **Konuşmacı adı:** Birçok oyun konuşanın adını farklı renkte yazar (Red Dead Redemption 2'de soluk gri "Dutch", Call of Duty'de mavi "Daniels:"). Uygulama satır başında rengi farklı olan kelimeleri ad olarak ayırır, ayrıca okur ve **çevirmeden** "Dutch: ..." biçiminde gösterir. Ad, altyazıda farklı renkte görünür.
+5. **Çeviri:** Metin, Meta'nın [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) modeliyle hemen Türkçeye çevrilir. `Kratos: Stay close.` gibi konuşmacı adı içeren satırlarda yalnızca konuşma çevrilir. Harf harf beliren altyazılarda çeviri, yazı uzadıkça güncellenir.
+6. **Gösterim:** Çeviri, OBS'teki **Tarayıcı kaynağına anında** gönderilir. Her çeviri en az 1,5 saniye ekranda kalır; hızlı geçen bir altyazının ardından yenisi gelirse önceki çeviri onun üstünde soluk olarak bir süre daha görünür. Altyazı oyundan kaybolunca çeviri de silinir.
 
 **Doğruluk:** 18 farklı oyunun (Zelda, Yakuza, Call of Duty, Assassin's Creed, Destiny 2, Hellblade, Xenoblade, WWE…) altyazılı ekran görüntülerinde kelime doğruluğu ortalama **%95**; 18 oyunun 15'inde %90'ın üzerinde. Altyazı içermeyen 37 sahne bölgesinin hiçbirinde yanlışlıkla "altyazı" okunmadı.
 
@@ -199,10 +200,7 @@ Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı
    - Bu yöntemde OBS'i ya da uygulamayı hangi sırayla açtığınızın önemi yoktur; sayfa uygulamaya kendiliğinden bağlanır, uygulama yeniden başlatılsa bile tekrar bağlanır.
    - Alternatif: **Yerel dosya** işaretlenmeden **Bağlantı Adresi** olarak `http://127.0.0.1:8765` da yazılabilir. Ancak bu durumda OBS uygulamadan önce açılırsa sayfa yüklenemez; kaynağın özelliklerinden **"Geçerli sayfanın önbelleğini yenile"** gerekir.
 3. Kaynak listesinde **Tarayıcı** kaynağının **Video Yakalama Aygıtı**'nın **üstünde** olduğundan emin olun.
-4. Türkçe yazı koyu bir kutu içinde gösterilir; kutu oyunun İngilizce altyazısını örter. Görünümü adres ile ayarlayabilirsiniz (bunun için **Yerel dosya** yerine adres yöntemini kullanın): `http://127.0.0.1:8765/?size=52&bottom=18&bg=0.8`
-   - `size`: yazı boyutu (piksel, varsayılan 46)
-   - `bottom`: alttan uzaklık (ekran yüksekliğinin yüzdesi, varsayılan 14). Kutunun İngilizce altyazının üstüne gelmesi için ayarlayın.
-   - `bg`: kutunun koyuluğu (0 = kutu yok, 1 = tamamen siyah, varsayılan 0.8)
+4. Altyazının **boyutunu, konumunu, rengini ve arka planını** uygulamadaki **Görünüm** düğmesinden ayarlayın. Değişiklikler OBS'e anında yansır; **Test yazısı göster** ile oyun açmadan deneyebilirsiniz. Türkçe yazı varsayılan olarak koyu bir kutu içinde gösterilir ve kutu oyunun İngilizce altyazısını örter.
 
 > Tarayıcı kaynağı, çeviriyi beklemeden anında gösterir. Eski **Metin (GDI+) → Dosyadan oku → `altyazi.txt`** yöntemi de çalışır, ancak OBS dosyayı saniyede bir kontrol ettiği için kısa altyazıları kaçırabilir.
 
@@ -222,7 +220,8 @@ Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı
    - Vazgeçmek için **ESC**'ye ya da **sağ tık**'a basın.
    - OBS logosu görüyorsanız sanal kamera başlatılmamıştır.
 5. **▶ Başlat**'a basın. İlk açılışta model yaklaşık 20 saniyede yüklenir; rozet **"CUDA · Hazır"** olunca pencere kendiliğinden küçülür.
-6. Oynayın! İşiniz bitince pencereyi açıp **■ Durdur**'a basın ya da kapatın.
+6. Altyazının görünümünü **Görünüm** düğmesinden ayarlayın (yazı boyutu, alttan konum, arka plan koyuluğu, yazı ve ad rengi, kenar çizgisi).
+7. Oynayın! İşiniz bitince pencereyi açıp **■ Durdur**'a basın ya da kapatın.
 
 Seçtiğiniz alan kaydedilir; bir sonraki açılışta doğrudan **Başlat**'a basabilirsiniz.
 
@@ -259,6 +258,7 @@ Uygulama ayarlarını proje klasöründeki `ayarlar.json` dosyasında tutar. Bu 
 | `min_contrast` | `25` | Yazının çevresinden en az ne kadar parlak olması gerektiği (0–255). |
 | `min_confidence` | `45` | Tesseract'ın bu puanın altında okuduğu kelimeler atılır (0–100). |
 | `overlay_port` | `8765` | OBS Tarayıcı kaynağının adresindeki port. |
+| `style` | — | Altyazının görünümü (boyut, konum, renkler). **Görünüm** penceresinden ayarlanır. |
 
 **Yazı arka plandan nasıl ayrılıyor?**
 Sabit bir parlaklık eşiği kullanılmaz; bazı oyunlarda altyazı koyu gridir ve arkadaki gömlek, el, gökyüzü gibi nesneler yazıdan parlaktır. Bunun yerine **yerel kontrasta** bakılır: çevresinden parlak **ince çizgiler** yazı sayılır, geniş parlak alanlar elenir. Ardından aynı satıra dizilmeyen ya da harf boyutunda olmayan lekeler atılır.

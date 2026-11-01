@@ -9,8 +9,9 @@ os.environ['QT_ENABLE_HIGHDPI_SCALING'] = '0'
 import cv2
 from PySide6.QtCore import QObject, QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QImage, QLinearGradient, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QGraphicsDropShadowEffect,
-                               QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QFrame,
+                               QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel,
+                               QMessageBox, QPushButton, QSlider, QVBoxLayout, QWidget)
 
 import motor
 
@@ -59,6 +60,13 @@ def stylesheet():
     QComboBox {{ background: #1b2740; color: #e6ecff; border: none; border-radius: {px(8)}px;
                  padding: {px(6)}px {px(10)}px; font-size: 9.5pt; }}
     QComboBox:disabled {{ color: #56607e; }}
+    QDialog {{ background: #121a2b; }}
+    QCheckBox {{ color: #e6ecff; }}
+    QSlider::groove:horizontal {{ height: {px(4)}px; background: #24345a; border-radius: {px(2)}px; }}
+    QSlider::sub-page:horizontal {{ background: #2f7bff; border-radius: {px(2)}px; }}
+    QSlider::handle:horizontal {{ background: #e6ecff; width: {px(14)}px; margin: -{px(5)}px 0;
+                                  border-radius: {px(7)}px; }}
+    QPushButton#swatch {{ border: 1px solid #3a4a70; padding: {px(6)}px; }}
     QComboBox::drop-down {{ border: none; width: {px(18)}px; }}
     QComboBox QAbstractItemView {{ background: #1b2740; color: #e6ecff;
                                    selection-background-color: #2f7bff; border: none; }}
@@ -310,6 +318,103 @@ class FrameSelector(QWidget):
         self.selected.emit(region)
 
 
+class StyleDialog(QDialog):
+    """Altyazinin gorunumu: degisiklikler OBS'teki altyazi sayfasina aninda uygulanir."""
+
+    SLIDERS = [  # anahtar, etiket, en az, en cok, olcek (kaydirici degeri / olcek = ayar), birim
+        ('size', 'Yazı boyutu', 20, 110, 1, ' px'),
+        ('bottom', 'Alttan konum', 0, 80, 1, ' %'),
+        ('bg', 'Arka plan koyuluğu', 0, 100, 100, ' %'),
+    ]
+    SAMPLE = ['Hayır, hayır.', 'Dutch: Bu fırtınada kimse bizi takip etmiyor...']
+
+    def __init__(self, parent, engine):
+        super().__init__(parent)
+        self.engine = engine
+        self.style_values = dict(engine.config['style'])
+        self.setWindowTitle('Altyazı Görünümü')
+        self.setStyleSheet(stylesheet())
+        self.setMinimumWidth(px(400))
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(px(20), px(18), px(20), px(18))
+        layout.setSpacing(px(12))
+        layout.addWidget(QLabel('Altyazı Görünümü', objectName='title'))
+        layout.addWidget(QLabel("Değişiklikler OBS'teki altyazıya anında uygulanır.",
+                                objectName='status', wordWrap=True))
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(px(12))
+        grid.setVerticalSpacing(px(10))
+        self.sliders = {}
+        for row, (key, label, low, high, scale, unit) in enumerate(self.SLIDERS):
+            slider = QSlider(Qt.Horizontal, minimum=low, maximum=high)
+            slider.setValue(round(self.style_values[key] * scale))
+            value = QLabel(f'{slider.value()}{unit}', objectName='status')
+            value.setMinimumWidth(px(48))
+            slider.valueChanged.connect(
+                lambda v, k=key, s=scale, u=unit, lab=value: self.changed(k, v / s if s != 1 else v, lab, f'{v}{u}'))
+            grid.addWidget(QLabel(label), row, 0)
+            grid.addWidget(slider, row, 1)
+            grid.addWidget(value, row, 2)
+            self.sliders[key] = slider
+        row = len(self.SLIDERS)
+        self.swatches = {}
+        for offset, (key, label) in enumerate((('color', 'Yazı rengi'), ('name_color', 'Konuşmacı adı rengi'))):
+            swatch = QPushButton(objectName='swatch', cursor=Qt.PointingHandCursor)
+            swatch.clicked.connect(lambda _=False, k=key: self.pick_color(k))
+            grid.addWidget(QLabel(label), row + offset, 0)
+            grid.addWidget(swatch, row + offset, 1, 1, 2)
+            self.swatches[key] = swatch
+        self.outline = QCheckBox('Yazının etrafında siyah kenar', checked=bool(self.style_values['outline']))
+        self.outline.toggled.connect(lambda on: self.changed('outline', on))
+        grid.addWidget(self.outline, row + 2, 0, 1, 3)
+        layout.addLayout(grid)
+        self.refresh_swatches()
+        buttons = QHBoxLayout()
+        test = QPushButton('Test yazısı göster', objectName='select', cursor=Qt.PointingHandCursor)
+        test.clicked.connect(self.show_test)
+        reset = QPushButton('Varsayılan', objectName='select', cursor=Qt.PointingHandCursor)
+        reset.clicked.connect(self.reset)
+        close = QPushButton('Kapat', objectName='start', cursor=Qt.PointingHandCursor)
+        close.clicked.connect(self.accept)
+        buttons.addWidget(test, 2)
+        buttons.addWidget(reset, 1)
+        buttons.addWidget(close, 1)
+        layout.addLayout(buttons)
+        dark_title_bar(self)
+
+    def changed(self, key, value, label=None, text=None):
+        self.style_values[key] = value
+        if label is not None:
+            label.setText(text)
+        self.engine.set_style(self.style_values)
+
+    def pick_color(self, key):
+        color = QColorDialog.getColor(QColor(self.style_values[key]), self, 'Renk seçin')
+        if color.isValid():
+            self.changed(key, color.name())
+            self.refresh_swatches()
+
+    def refresh_swatches(self):
+        for key, swatch in self.swatches.items():
+            value = self.style_values[key]
+            swatch.setText(value.upper())
+            text = '#000000' if QColor(value).lightness() > 140 else '#ffffff'
+            swatch.setStyleSheet(f'background: {value}; color: {text};')
+
+    def show_test(self):
+        self.engine.show_test(self.SAMPLE)
+        # Ceviri calismiyorsa ornek yazi birkac saniye sonra kalkar; calisiyorsa sonraki altyazi ezer.
+        QTimer.singleShot(6000, lambda: None if self.engine.running() else self.engine.show_test([]))
+
+    def reset(self):
+        self.style_values = dict(motor.STYLE_DEFAULTS)
+        for key, _, _, _, scale, _ in self.SLIDERS:
+            self.sliders[key].setValue(round(self.style_values[key] * scale))
+        self.outline.setChecked(self.style_values['outline'])
+        self.refresh_swatches()
+        self.engine.set_style(self.style_values)
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -369,10 +474,13 @@ class MainWindow(QWidget):
         buttons = QHBoxLayout()
         buttons.setSpacing(px(10))
         self.select_button = QPushButton('Alan Seç', objectName='select', cursor=Qt.PointingHandCursor)
+        self.style_button = QPushButton('Görünüm', objectName='select', cursor=Qt.PointingHandCursor)
         self.start_button = QPushButton(objectName='start', cursor=Qt.PointingHandCursor)
         self.select_button.clicked.connect(self.select)
+        self.style_button.clicked.connect(self.edit_style)
         self.start_button.clicked.connect(self.toggle)
         buttons.addWidget(self.select_button, 1)
+        buttons.addWidget(self.style_button, 1)
         buttons.addWidget(self.start_button, 2)
         layout.addLayout(buttons)
 
@@ -391,6 +499,7 @@ class MainWindow(QWidget):
             block.addWidget(label)
             layout.addLayout(block)
         layout.addWidget(QFrame(objectName='divider'))
+        self.engine.ensure_overlay()  # altyazi sayfasi hemen hazir olsun (gorunum ve test icin)
         self.overlay_label = QLabel(objectName='small', wordWrap=True)
         self.overlay_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.overlay_label)
@@ -523,6 +632,10 @@ class MainWindow(QWidget):
             self.state = 'ready'
         self.set_status('Başlatılıyor...')
         self.refresh()
+
+    def edit_style(self):
+        StyleDialog(self, self.engine).exec()
+        motor.save_config(self.config)
 
     def closeEvent(self, event):
         self.engine.stop()
