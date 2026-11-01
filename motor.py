@@ -55,6 +55,7 @@ POLL = 0.05          # goruntu kontrol araligi (sn)
 CHANGE_GRID = (160, 40)  # degisim kontrolu icin kucultulmus yazi maskesi
 CHANGE_PIXELS = 8        # bundan az piksel degistiyse kare "degismedi" sayilir
 CLEAR_AFTER = 0.7    # bu kadar sure yazi gorunmezse altyazi silinir (sn)
+BETTER_READ = 8          # ayni altyazi bu kadar daha yuksek guvenle okunursa ceviri guncellenir
 MIN_SHOW = 1.5       # her ceviri en az bu kadar ekranda kalir (sn)
 KEEP_PREVIOUS = 2.5  # yeni altyazi gelince, bundan kisa sure gorunmus onceki ceviri ustte kalir (sn)
 SIMILAR = 0.9        # bu oranin ustundeki iki okuma ayni metin sayilir
@@ -64,7 +65,9 @@ OCR_LETTER_HEIGHT = 16   # OCR'den once harfler bu yukseklige olceklenir (px)
 SPEAKER_COLOR_DIFF = 22  # konusmaci adi, konusmadan en az bu kadar farkli renkte (Lab) olmali
 CAMERA_SIZE = (1920, 1080)
 WORD = re.compile(r"[\"'“‘(\[*-]*[A-Za-z0-9][A-Za-z0-9'’.-]*[.,!?:;…)\]\"'”’*]*")
-SPEAKER = re.compile(r"^((?:[A-Z][\w'.-]*\s?){1,3}):\s*(.+)$")
+SPEAKER = re.compile(r"^((?:[A-Z][\w'.-]+\s?){1,3}):\s*(.+)$")
+NAME = re.compile(r"[A-Z][A-Za-z'.-]+(?: [A-Z][A-Za-z'.-]+){0,2}")
+MIN_MEAN_CONFIDENCE = 70  # olcum: arka plan dokusundan cikan okumalar 50-66, gercek altyazilar 77+
 
 
 def screen_capture():
@@ -269,6 +272,12 @@ def clean_text(raw):
     text = re.sub(r'(\w)-\s*\n\s*(\w)', r'\1\2', raw)  # satir sonu tirelemesi
     text = ' '.join(text.split())
     text = re.sub(r'(?<![^\s.,!?;:])\|(?=\s|$)', 'I', text)  # tek basina "|" aslinda "I" zamiridir
+    # Egik kesme isaretli "I'll", "I've" bazi yazi tiplerinde "V'll", "VIl", "Uli", "ve" okunur.
+    # Yalnizca cumle basinda duzeltilir (orada baska bir kelime olmalari pek mumkun degil).
+    start = r"(^|[.!?…]\s+|:\s+)"
+    text = re.sub(start + r"(?:[VPU1l|][’']?ll|[VPU]Il|Uli|UI|Ill)(?=\s)", r"\1I'll", text)
+    text = re.sub(start + r"(?:[VPU1l|][’']?ve|ve)(?=\s+[a-z])", r"\1I've", text)
+    text = re.sub(start + r"(?:[VPU1l|][’']m)(?=\s)", r"\1I'm", text)
     return strip_junk(text.strip(' |_~'))  # Tesseract'in kenarlarda urettigi cop karakterler
 
 
@@ -333,11 +342,17 @@ def split_speaker(mask, color):
     colors = [np.median(lab[np.isin(labels, w)], axis=0) for w in words]
     reference = np.median(colors[min(2, len(words) - 1):], axis=0)
     distance = [float(np.linalg.norm(c - reference)) for c in colors]
+    # "I" gibi ince kelimelerin rengi birkac pikselden olculur ve guvenilmez; adlar hep genistir.
+    # Bu yuzden ince bir kelimeye gelince ad biter ("ENZO: I hope..." -> "I" konusmaya aittir).
+    wide = [max(stats[i][0] + stats[i][2] for i in w) - min(stats[i][0] for i in w) >= 1.2 * height
+            for w in words]
     speaker = 0
-    while speaker < min(2, len(words) - 1) and distance[speaker] > SPEAKER_COLOR_DIFF:
+    while (speaker < min(2, len(words) - 1) and wide[speaker]
+           and distance[speaker] > SPEAKER_COLOR_DIFF):
         speaker += 1
-    # Addan sonraki kelime konusmanin renginde olmali; aksi halde renk farki rastlantisaldir.
-    if not speaker or distance[speaker] > max(SPEAKER_COLOR_DIFF, 0.6 * distance[speaker - 1]):
+    # Addan sonraki ilk genis kelime konusmanin renginde olmali; aksi halde renk farki rastlantisaldir.
+    after = next((j for j in range(speaker, len(words)) if wide[j]), None)
+    if not speaker or after is None or distance[after] > max(SPEAKER_COLOR_DIFF, 0.6 * distance[speaker - 1]):
         return mask, None
     name = [i for w in words[:speaker] for i in w]
     x1 = min(stats[i][0] for i in name)
@@ -345,38 +360,56 @@ def split_speaker(mask, color):
     y1 = int(min(stats[i][1] for i in line) - 0.3 * height)
     y2 = int(max(stats[i][1] + stats[i][3] for i in line) + 0.3 * height)
     pad = int(0.2 * height)
-    box = (max(0, x1 - pad), max(0, y1), x2 + pad, y2)
+    # Silinen bolge konusmanin ilk kelimesine kadar uzanir: adin arkasindaki ":" de silinmeli,
+    # yoksa satir ":" ile baslar ve Tesseract hemen yanindaki "I'll", "I'm" kelimesini atar.
+    # Ilk kelimenin kendisine dokunulmaz (ilk cizgisi kesilirse kelime yine kaybolur).
+    first = min(stats[i][0] for i in words[speaker])
+    box = (max(0, x1 - pad), max(0, y1), max(x2 + 1, first - 1), y2)
     dialogue = mask.copy()
     dialogue[box[1]:box[3], box[0]:box[2]] = 255  # adin kirintilari dahil tum murekkebi sil
     return dialogue, box
 
 
 def read_subtitle(mask, color, min_confidence):
-    """Altyaziyi okur; renkle ayrilan konusmaci adi varsa "Ad: konusma" bicimine getirir.
-    Ad ayri okunur ve ceviriye girmez (Translator "Ad:" oncesini cevirmez)."""
-    dialogue, box = split_speaker(mask, color) if color is not None else (mask, None)
-    text = read_text(dialogue, min_confidence)
-    if text and box is not None:
-        name = read_name(cv2.cvtColor(color, cv2.COLOR_BGR2GRAY), box)
-        if name:
-            return f'{name}: {text}'
-    return text
+    """Altyaziyi okur: (metin, ortalama guven puani).
+    Renkle ayrilan konusmaci adi varsa "Ad: konusma" bicimine getirir; ad ayri okunur ve ceviriye
+    girmez (Translator "Ad:" oncesini cevirmez). Ad okunamazsa hicbir kelime kaybolmasin diye
+    metnin tamami ayirmadan yeniden okunur."""
+    scores = _ocr_scores.values = []
+    try:
+        dialogue, box = split_speaker(mask, color) if color is not None else (mask, None)
+        text = read_text(dialogue, min_confidence)
+        if text and box is not None:
+            _ocr_scores.values = None  # adin puani metnin guvenini dusurmesin
+            raw = read_name(cv2.cvtColor(color, cv2.COLOR_BGR2GRAY), box)
+            _ocr_scores.values = scores
+            name, _, rest = raw.partition(':')  # "ENZO: I" -> ad "ENZO", "I" konusmaya doner
+            name, rest = name.strip().rstrip('.;,'), rest.strip()
+            if not rest[:1].isupper():
+                rest = ''  # kucuk harfli parca ("Ar: thu") adin kirik okunmus devamidir, konusma degil
+            if NAME.fullmatch(name):
+                text = f"{name}: {(rest.strip() + ' ' + text).strip()}"
+            else:
+                scores.clear()
+                text = read_text(mask, min_confidence)
+    finally:
+        _ocr_scores.values = None
+    return text, (float(np.mean(scores)) if scores else 0.0)
 
 
 def read_name(gray, box):
-    """Konusmaci adini dogrudan gri goruntuden okur. Ad cogu zaman soluk ve ince yazildigi
-    icin genel yazi maskesinde kopuk cikar; kendi kutusunda ayri esiklenip buyutulunce
-    cok daha iyi okunur. Ad gibi gorunmuyorsa None."""
+    """Konusmaci adinin kutusunu dogrudan gri goruntuden okur (ham metin). Ad cogu zaman soluk
+    ve ince yazildigi icin genel yazi maskesinde kopuk cikar; kendi kutusunda ayri esiklenip
+    buyutulunce cok daha iyi okunur."""
     x1, y1, x2, y2 = box
     crop = gray[y1:y2, x1:x2]
     if crop.size == 0:
-        return None
+        return ''
     factor = 3 * OCR_LETTER_HEIGHT / max(1, crop.shape[0])
     crop = cv2.resize(crop, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
     image = cv2.threshold(crop, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
     image = cv2.copyMakeBorder(image, 12, 12, 12, 12, cv2.BORDER_CONSTANT, value=255)
-    name = ocr_words(image, 30, 7).rstrip(':.;,')
-    return name if re.fullmatch(r"[A-Z][A-Za-z'.-]+(?: [A-Z][A-Za-z'.-]+)?", name) else None
+    return ocr_words(image, 30, 7)
 
 
 def crop_to_ink(image, pad=12):
@@ -456,20 +489,26 @@ def read_text(image, min_confidence):
                                 for a, b in lines))
 
 
+_ocr_scores = threading.local()  # son okumada kabul edilen kelimelerin guven puanlari
+
+
 def ocr_words(image, min_confidence, psm):
     data = pytesseract.image_to_data(image, lang='eng', config=f'--psm {psm}',
                                      output_type=pytesseract.Output.DICT)
     lines = OrderedDict()
+    scores = getattr(_ocr_scores, 'values', None)
     for i, word in enumerate(data['text']):
         word = word.strip()
         if not word or float(data['conf'][i]) < min_confidence:
             continue
         key = (data['block_num'][i], data['par_num'][i], data['line_num'][i])
         lines.setdefault(key, []).append(word)
+        if scores is not None:
+            scores.append(float(data['conf'][i]))
     return clean_text('\n'.join(' '.join(words) for words in lines.values()))
 
 
-def looks_like_text(text):
+def looks_like_text(text, confidence=None):
     # Arka plandaki nesnelerden cikan "& i Ne. . t ; wl" gibi okumalari eler ("No, no." gibi
     # kisa gercek altyazilar kalir): parcalarin cogu kelime gibi olmali (harflerden olusan,
     # yalnizca kenarlarinda noktalama tasiyan) ve en az bir parca iki harfli olmali.
@@ -482,6 +521,14 @@ def looks_like_text(text):
              (sum(c.isalnum() for c in t) >= 2 or t.strip('"\'“”‘’.,!?:;()[]*') in ('I', 'a', 'A'))]
     if not any(sum(c.isalpha() for c in w) >= 2 for w in words):
         return False
+    if confidence is not None:
+        # Kaya, toprak gibi dokulu arka planlardan cikan "I I I : I Be", "sa" gibi okumalarin
+        # ortalama guveni dusuktur. Uc harfli gercek kelime icermeyen kisa okumalar ("re", "me")
+        # icin daha yuksek guven istenir; "Go!", "No, no." gibi gercek kisa altyazilar 95 civarindadir.
+        if confidence < MIN_MEAN_CONFIDENCE:
+            return False
+        if not any(sum(c.isalpha() for c in w) >= 3 for w in words) and confidence < 90:
+            return False
     return len(words) >= 0.75 * len(tokens)
 
 
@@ -502,6 +549,11 @@ def subtitle_change(current, committed):
     konusma yeniden cevrilmesin."""
     if not committed:
         return 'new'
+    # Harf harf beliren yazi: onceki okuma yenisinin basiysa (noktalama ve ad ayirma farki
+    # gozetmeksizin, "Tomm ." -> "Tommy: Every...") ayni altyazi buyumustur.
+    letters = lambda t: re.sub(r'[^a-z0-9]', '', t.lower())
+    if len(letters(current)) > len(letters(committed)) and letters(current).startswith(letters(committed)):
+        return 'grow'
     named = SPEAKER.match(current) and not SPEAKER.match(committed)
     current, committed = without_speaker(current), without_speaker(committed)
     if named and similar(current, committed):
@@ -757,6 +809,7 @@ class Engine:
         mode, min_contrast = self.config['text_mode'], float(self.config['min_contrast'])
         min_confidence = float(self.config['min_confidence'])
         committed = ''  # ceviriye gonderilen son metin
+        committed_confidence = 0.0
         visible = False
         last_seen = time.monotonic()
         previous_small = None
@@ -782,9 +835,10 @@ class Engine:
                 if changed:
                     previous_small = small
                     detected = time.perf_counter()
-                    current = self.stable_speaker(read_subtitle(mask, color, min_confidence))
+                    current, confidence = read_subtitle(mask, color, min_confidence)
+                    current = self.stable_speaker(current)
                     self.ui(ocr_ms=int((time.perf_counter() - detected) * 1000))
-                    visible = looks_like_text(current)
+                    visible = looks_like_text(current, confidence)
                     if not visible and np.mean(small < 128) > 0.005:
                         # Karede yazi izi var ama okunamadi (yazi henuz tam cizilmemis olabilir):
                         # kare degismese de bir sonraki turda yeniden dene.
@@ -792,8 +846,13 @@ class Engine:
                     if visible:
                         last_seen = time.monotonic()
                         change = subtitle_change(current, committed)
+                        if (not change and current != committed
+                                and confidence >= committed_confidence + BETTER_READ):
+                            # Ayni altyazi bu karede daha net okundu (ornegin arkadaki parlak
+                            # nesne gecti): ceviri daha iyi okumayla guncellenir.
+                            change = 'grow'
                         if change:
-                            committed = current
+                            committed, committed_confidence = current, confidence
                             self.ui(english=current)
                             self.enqueue(pending, current, detected, change == 'grow')
                 elif visible:
