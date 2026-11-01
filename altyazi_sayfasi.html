@@ -72,10 +72,12 @@
     }));
     shown = lines;
   }
-  // Dosya olarak acildiysa uygulamaya adresle baglanilir. Uygulama kapaliysa ya da yeniden
-  // baslatildiysa birkac saniyede bir tekrar denenir; OBS'te sayfayi yenilemek gerekmez.
-  const remote = location.protocol === 'file:' || q.has('port');
-  const events_url = (remote ? 'http://127.0.0.1:' + (q.get('port') || 8765) : '') + '/events';
+  // Sayfa uygulamanin kendi sunucusundan acilmadiysa (OBS yerel dosyalari file:// ile degil
+  // http://absolute/... adresiyle acar) uygulamaya tam adresle baglanilir. Uygulama kapaliysa
+  // ya da yeniden baslatildiysa birkac saniyede bir tekrar denenir; OBS'te sayfayi yenilemek gerekmez.
+  const port = q.get('port') || 8765;
+  const fromApp = ['127.0.0.1', 'localhost'].includes(location.hostname) && location.port === String(port);
+  const events_url = (fromApp ? '' : 'http://127.0.0.1:' + port) + '/events';
   function connect() {
     const events = new EventSource(events_url);
     events.onmessage = e => {
