@@ -220,7 +220,7 @@ Oyunu bilgisayar üzerinden TV'de oynarsınız: TV, bilgisayarın ikinci ekranı
    - Vazgeçmek için **ESC**'ye ya da **sağ tık**'a basın.
    - OBS logosu görüyorsanız sanal kamera başlatılmamıştır.
 5. **▶ Başlat**'a basın. İlk açılışta model yaklaşık 20 saniyede yüklenir; rozet **"CUDA · Hazır"** olunca pencere kendiliğinden küçülür.
-6. Altyazının görünümünü **Görünüm** düğmesinden ayarlayın (yazı boyutu, alttan konum, arka plan koyuluğu, yazı ve ad rengi, kenar çizgisi).
+6. Altyazının görünümünü **Görünüm** düğmesinden ayarlayın (yazı boyutu, alttan konum, arka plan koyuluğu, yazı ve ad rengi, kenar çizgisi, önceki altyazının üstte gösterilip gösterilmeyeceği).
 7. Oynayın! İşiniz bitince pencereyi açıp **■ Durdur**'a basın ya da kapatın.
 
 Seçtiğiniz alan kaydedilir; bir sonraki açılışta doğrudan **Başlat**'a basabilirsiniz.

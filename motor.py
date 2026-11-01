@@ -49,6 +49,7 @@ STYLE_DEFAULTS = {
     'color': '#ffffff',    # yazi rengi
     'name_color': '#f2c94c',  # konusmaci adinin rengi
     'outline': True,       # yazinin etrafinda siyah kenar
+    'show_previous': True,  # hizli gecen onceki ceviri yenisinin ustunde soluk olarak kalsin
 }
 POLL = 0.05          # goruntu kontrol araligi (sn)
 CHANGE_GRID = (160, 40)  # degisim kontrolu icin kucultulmus yazi maskesi
@@ -606,6 +607,9 @@ class Engine:
         self.config['style'] = dict(style)
         if self.overlay:
             self.overlay.set_style(style)
+        with self.gen_lock:
+            if self.lines:
+                self.publish()  # "onceki altyaziyi goster" degistiyse ekrandaki satirlar hemen guncellensin
 
     def show_test(self, lines):
         """Gorunumu denemek icin altyaziya ornek satir yazar (ceviri calisiyorsa sonraki altyazi ezer)."""
@@ -682,6 +686,8 @@ class Engine:
     def publish(self):
         # gen_lock altinda cagrilir.
         texts = [text for text, _ in self.lines]
+        if not self.config['style'].get('show_previous', True):
+            texts = texts[-1:]
         write_output('\n'.join(texts))
         if self.overlay:
             self.overlay.publish(texts)

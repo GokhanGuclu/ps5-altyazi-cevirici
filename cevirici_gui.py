@@ -367,6 +367,10 @@ class StyleDialog(QDialog):
         self.outline = QCheckBox('Yazının etrafında siyah kenar', checked=bool(self.style_values['outline']))
         self.outline.toggled.connect(lambda on: self.changed('outline', on))
         grid.addWidget(self.outline, row + 2, 0, 1, 3)
+        self.previous = QCheckBox('Önceki altyazıyı üstte göster (hızlı geçenler kaçmasın)',
+                                  checked=bool(self.style_values['show_previous']))
+        self.previous.toggled.connect(lambda on: self.changed('show_previous', on))
+        grid.addWidget(self.previous, row + 3, 0, 1, 3)
         layout.addLayout(grid)
         self.refresh_swatches()
         buttons = QHBoxLayout()
@@ -411,6 +415,7 @@ class StyleDialog(QDialog):
         for key, _, _, _, scale, _ in self.SLIDERS:
             self.sliders[key].setValue(round(self.style_values[key] * scale))
         self.outline.setChecked(self.style_values['outline'])
+        self.previous.setChecked(self.style_values['show_previous'])
         self.refresh_swatches()
         self.engine.set_style(self.style_values)
 
